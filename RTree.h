@@ -375,6 +375,9 @@ protected:
 public:
   // return all the AABBs that form the RTree
   std::vector<Rect> ListTree() const;
+
+  Rect Bounds() const;
+  int Dimensions() const;
 };
 
 
@@ -1692,6 +1695,34 @@ std::vector<typename RTREE_QUAL::Rect> RTREE_QUAL::ListTree() const
   }
 
   return treeList;
+}
+
+RTREE_TEMPLATE
+typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const
+{
+  ASSERT(m_root);
+  ASSERT(m_root->m_level >= 0);
+  ASSERT(m_root->m_count > 0);
+
+  Rect bounds;
+  Branch& first_branch = m_root->m_branch[0];
+  bounds = first_branch.m_rect; // init
+  for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {
+    Branch& branch = m_root->m_branch[branch_id];
+    Rect& other_rect = branch.m_rect;
+    for(int index = 0; index < dims; index++) {
+      bounds.m_min[index] = Min(bounds.m_min[index], other_rect.m_min[index]);
+      bounds.m_max[index] = Max(bounds.m_max[index], other_rect.m_max[index]);
+    }
+  }
+
+  return bounds;
+}
+
+RTREE_TEMPLATE
+int RTREE_QUAL::Dimensions() const
+{
+  return this->dims;
 }
 
 
