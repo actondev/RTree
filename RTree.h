@@ -25,8 +25,8 @@
 // RTree.h
 //
 
-#define RTREE_TEMPLATE template<class DATATYPE, class ELEMTYPE, int NUMDIMS, class ELEMTYPEREAL, int TMAXNODES, int TMINNODES>
-#define RTREE_QUAL RTree<DATATYPE, ELEMTYPE, NUMDIMS, ELEMTYPEREAL, TMAXNODES, TMINNODES>
+#define RTREE_TEMPLATE template<class DATATYPE, class ELEMTYPE, int MAXDIMS, class ELEMTYPEREAL, int TMAXNODES, int TMINNODES>
+#define RTREE_QUAL RTree<DATATYPE, ELEMTYPE, MAXDIMS, ELEMTYPEREAL, TMAXNODES, TMINNODES>
 
 #define RTREE_DONT_USE_MEMPOOLS // This version does not contain a fixed memory allocator, fill in lines with EXAMPLE to implement one.
 #define RTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower on some systems
@@ -51,14 +51,16 @@ class RTFileStream;  // File I/O helper class, look below for implementation and
 ///        Instead of using a callback function for returned results, I recommend and efficient pre-sized, grow-only memory
 ///        array similar to MFC CArray or STL Vector for returning search query result.
 ///
-template<class DATATYPE, class ELEMTYPE, int NUMDIMS,
-         class ELEMTYPEREAL = ELEMTYPE, int TMAXNODES = 8, int TMINNODES = TMAXNODES / 2>
+template<class DATATYPE, class ELEMTYPE,
+         int MAXDIMS = 3, class ELEMTYPEREAL = ELEMTYPE,
+         int TMAXNODES = 8, int TMINNODES = TMAXNODES / 2>
 class RTree
 {
   static_assert(std::numeric_limits<ELEMTYPEREAL>::is_iec559, "'ELEMTYPEREAL' accepts floating-point types only");
 
+  typedef std::function<bool (const DATATYPE&)> Callback;
 protected:
-
+  uint32_t dims; // set by the constructor
   struct Node;  // Fwd decl.  Used by other internal structs and iterator
 
 public:
@@ -72,8 +74,8 @@ public:
   };
 
 public:
-
   RTree();
+  RTree(int dims);
   RTree(const RTree& other);
   virtual ~RTree();
 
@@ -81,22 +83,21 @@ public:
   /// \param a_min Min of bounding rect
   /// \param a_max Max of bounding rect
   /// \param a_dataId Positive Id of data.  Maybe zero, but negative numbers not allowed.
-  void Insert(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], const DATATYPE& a_dataId);
+  void Insert(const ELEMTYPE* a_min, const ELEMTYPE* a_max, const DATATYPE& a_dataId);
 
   /// Remove entry
   /// \param a_min Min of bounding rect
   /// \param a_max Max of bounding rect
-  /// \param a_dataId Positive Id of data.  Maybe zero, but negative numbers not allowed.
-  void Remove(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], const DATATYPE& a_dataId);
+  /// \param predicate passing the stored type. Should return true if the node should be removed
+  void Remove(const ELEMTYPE* a_min, const ELEMTYPE* a_max, Callback predicate);
 
   /// Find all within search rectangle
   /// \param a_min Min of search bounding rect
   /// \param a_max Max of search bounding rect
-  /// \param a_searchResult Search result array.  Caller should set grow size. Function will reset, not append to array.
-  /// \param a_resultCallback Callback function to return result.  Callback should return 'true' to continue searching
-  /// \param a_context User context to pass as parameter to a_resultCallback
+  /// \param a_searchResult Search result array. Caller should set grow size. Function will reset, not append to array.
+  /// \param callback Callback function to return result. Callback should return 'true' to continue searching
   /// \return Returns the number of entries found
-  int Search(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], std::function<bool (const DATATYPE&)> callback) const;
+  int Search(const ELEMTYPE* a_min, const ELEMTYPE* a_max, Callback callback) const;
 
   /// Remove all entries from tree
   void RemoveAll();
@@ -160,13 +161,13 @@ public:
     bool operator++()                             { return FindNextData(); }
 
     /// Get the bounds for this node
-    void GetBounds(ELEMTYPE a_min[NUMDIMS], ELEMTYPE a_max[NUMDIMS])
+    void GetBounds(ELEMTYPE* a_min, ELEMTYPE* a_max)
     {
       ASSERT(IsNotNull());
       StackElement& curTos = m_stack[m_tos - 1];
       Branch& curBranch = curTos.m_node->m_branch[curTos.m_branchIndex];
 
-      for(int index = 0; index < NUMDIMS; ++index)
+      for(int index = 0; index < dims; ++index)
       {
         a_min[index] = curBranch.m_rect.m_min[index];
         a_max[index] = curBranch.m_rect.m_max[index];
@@ -281,8 +282,9 @@ protected:
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect
   {
-    ELEMTYPE m_min[NUMDIMS];                      ///< Min dimensions of bounding box
-    ELEMTYPE m_max[NUMDIMS];                      ///< Max dimensions of bounding box
+    // Note: MAXDIMS is stored in memory, even if we use dims (as passed in constructor)
+    ELEMTYPE m_min[MAXDIMS];                      ///< Min dimensions of bounding box
+    ELEMTYPE m_max[MAXDIMS];                      ///< Max dimensions of bounding box
   };
 
   /// May be data or may be another subtree
@@ -352,13 +354,13 @@ protected:
   void InitParVars(PartitionVars* a_parVars, int a_maxRects, int a_minFill);
   void PickSeeds(PartitionVars* a_parVars);
   void Classify(int a_index, int a_group, PartitionVars* a_parVars);
-  bool RemoveRect(Rect* a_rect, const DATATYPE& a_id, Node** a_root);
-  bool RemoveRectRec(Rect* a_rect, const DATATYPE& a_id, Node* a_node, ListNode** a_listNode);
+  bool RemoveRect(Rect* a_rect, Callback predicate, Node** a_root);
+  bool RemoveRectRec(Rect* a_rect, Callback predicate, Node* a_node, ListNode** a_listNode);
   ListNode* AllocListNode();
   void FreeListNode(ListNode* a_listNode);
   bool Overlap(Rect* a_rectA, Rect* a_rectB) const;
   void ReInsert(Node* a_node, ListNode** a_listNode);
-  bool Search(Node* a_node, Rect* a_rect, int& a_foundCount, std::function<bool (const DATATYPE&)> callback) const;
+  bool Search(Node* a_node, Rect* a_rect, int& a_foundCount, Callback callback) const;
   void RemoveAllRec(Node* a_node);
   void Reset();
   void CountRec(Node* a_node, int& a_count);
@@ -453,12 +455,16 @@ public:
   }
 };
 
+RTREE_TEMPLATE
+RTREE_QUAL::RTree(): RTree(MAXDIMS) { }
 
 RTREE_TEMPLATE
-RTREE_QUAL::RTree()
+RTREE_QUAL::RTree(int dims)
 {
+  ASSERT(dims <= MAXDIMS);
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
+  this->dims = dims;
 
   // Precomputed volumes of the unit spheres for the first few dimensions
   const float UNIT_SPHERE_VOLUMES[] = {
@@ -473,7 +479,7 @@ RTREE_QUAL::RTree()
 
   m_root = AllocNode();
   m_root->m_level = 0;
-  m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[dims];
 }
 
 
@@ -492,10 +498,10 @@ RTREE_QUAL::~RTree()
 
 
 RTREE_TEMPLATE
-void RTREE_QUAL::Insert(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], const DATATYPE& a_dataId)
+void RTREE_QUAL::Insert(const ELEMTYPE* a_min, const ELEMTYPE* a_max, const DATATYPE& a_dataId)
 {
 #ifdef _DEBUG
-  for(int index=0; index<NUMDIMS; ++index)
+  for(int index=0; index<dims; ++index)
   {
     ASSERT(a_min[index] <= a_max[index]);
   }
@@ -505,7 +511,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMD
   branch.m_data = a_dataId;
   branch.m_child = NULL;
 
-  for(int axis=0; axis<NUMDIMS; ++axis)
+  for(int axis=0; axis<dims; ++axis)
   {
     branch.m_rect.m_min[axis] = a_min[axis];
     branch.m_rect.m_max[axis] = a_max[axis];
@@ -516,10 +522,10 @@ void RTREE_QUAL::Insert(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMD
 
 
 RTREE_TEMPLATE
-void RTREE_QUAL::Remove(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], const DATATYPE& a_dataId)
+void RTREE_QUAL::Remove(const ELEMTYPE* a_min, const ELEMTYPE* a_max, Callback predicate)
 {
 #ifdef _DEBUG
-  for(int index=0; index<NUMDIMS; ++index)
+  for(int index=0; index<dims; ++index)
   {
     ASSERT(a_min[index] <= a_max[index]);
   }
@@ -527,21 +533,21 @@ void RTREE_QUAL::Remove(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMD
 
   Rect rect;
 
-  for(int axis=0; axis<NUMDIMS; ++axis)
+  for(int axis=0; axis<dims; ++axis)
   {
     rect.m_min[axis] = a_min[axis];
     rect.m_max[axis] = a_max[axis];
   }
 
-  RemoveRect(&rect, a_dataId, &m_root);
+  RemoveRect(&rect, predicate, &m_root);
 }
 
 
 RTREE_TEMPLATE
-int RTREE_QUAL::Search(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], std::function<bool (const DATATYPE&)> callback) const
+int RTREE_QUAL::Search(const ELEMTYPE* a_min, const ELEMTYPE* a_max, Callback callback) const
 {
 #ifdef _DEBUG
-  for(int index=0; index<NUMDIMS; ++index)
+  for(int index=0; index<dims; ++index)
   {
     ASSERT(a_min[index] <= a_max[index]);
   }
@@ -549,7 +555,7 @@ int RTREE_QUAL::Search(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDI
 
   Rect rect;
 
-  for(int axis=0; axis<NUMDIMS; ++axis)
+  for(int axis=0; axis<dims; ++axis)
   {
     rect.m_min[axis] = a_min[axis];
     rect.m_max[axis] = a_max[axis];
@@ -618,7 +624,7 @@ bool RTREE_QUAL::Load(RTFileStream& a_stream)
   // Write some kind of header
   int _dataFileId = ('R'<<0)|('T'<<8)|('R'<<16)|('E'<<24);
   int _dataSize = sizeof(DATATYPE);
-  int _dataNumDims = NUMDIMS;
+  int _dataNumDims = dims;
   int _dataElemSize = sizeof(ELEMTYPE);
   int _dataElemRealSize = sizeof(ELEMTYPEREAL);
   int _dataMaxNodes = TMAXNODES;
@@ -672,8 +678,8 @@ bool RTREE_QUAL::LoadRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
-      a_stream.ReadArray(curBranch->m_rect.m_min, NUMDIMS);
-      a_stream.ReadArray(curBranch->m_rect.m_max, NUMDIMS);
+      a_stream.ReadArray(curBranch->m_rect.m_min, dims);
+      a_stream.ReadArray(curBranch->m_rect.m_max, dims);
 
       curBranch->m_child = AllocNode();
       LoadRec(curBranch->m_child, a_stream);
@@ -685,8 +691,8 @@ bool RTREE_QUAL::LoadRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
-      a_stream.ReadArray(curBranch->m_rect.m_min, NUMDIMS);
-      a_stream.ReadArray(curBranch->m_rect.m_max, NUMDIMS);
+      a_stream.ReadArray(curBranch->m_rect.m_min, dims);
+      a_stream.ReadArray(curBranch->m_rect.m_max, dims);
 
       a_stream.Read(curBranch->m_data);
     }
@@ -710,11 +716,11 @@ void RTREE_QUAL::CopyRec(Node* current, Node* other)
       Branch* otherBranch = &other->m_branch[index];
 
       std::copy(otherBranch->m_rect.m_min,
-                otherBranch->m_rect.m_min + NUMDIMS,
+                otherBranch->m_rect.m_min + dims,
                 currentBranch->m_rect.m_min);
 
       std::copy(otherBranch->m_rect.m_max,
-                otherBranch->m_rect.m_max + NUMDIMS,
+                otherBranch->m_rect.m_max + dims,
                 currentBranch->m_rect.m_max);
 
       currentBranch->m_child = AllocNode();
@@ -729,11 +735,11 @@ void RTREE_QUAL::CopyRec(Node* current, Node* other)
       Branch* otherBranch = &other->m_branch[index];
 
       std::copy(otherBranch->m_rect.m_min,
-                otherBranch->m_rect.m_min + NUMDIMS,
+                otherBranch->m_rect.m_min + dims,
                 currentBranch->m_rect.m_min);
 
       std::copy(otherBranch->m_rect.m_max,
-                otherBranch->m_rect.m_max + NUMDIMS,
+                otherBranch->m_rect.m_max + dims,
                 currentBranch->m_rect.m_max);
 
       currentBranch->m_data = otherBranch->m_data;
@@ -765,7 +771,7 @@ bool RTREE_QUAL::Save(RTFileStream& a_stream)
   // Write some kind of header
   int dataFileId = ('R'<<0)|('T'<<8)|('R'<<16)|('E'<<24);
   int dataSize = sizeof(DATATYPE);
-  int dataNumDims = NUMDIMS;
+  int dataNumDims = dims;
   int dataElemSize = sizeof(ELEMTYPE);
   int dataElemRealSize = sizeof(ELEMTYPEREAL);
   int dataMaxNodes = TMAXNODES;
@@ -798,8 +804,8 @@ bool RTREE_QUAL::SaveRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
-      a_stream.WriteArray(curBranch->m_rect.m_min, NUMDIMS);
-      a_stream.WriteArray(curBranch->m_rect.m_max, NUMDIMS);
+      a_stream.WriteArray(curBranch->m_rect.m_min, dims);
+      a_stream.WriteArray(curBranch->m_rect.m_max, dims);
 
       SaveRec(curBranch->m_child, a_stream);
     }
@@ -810,8 +816,8 @@ bool RTREE_QUAL::SaveRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
-      a_stream.WriteArray(curBranch->m_rect.m_min, NUMDIMS);
-      a_stream.WriteArray(curBranch->m_rect.m_max, NUMDIMS);
+      a_stream.WriteArray(curBranch->m_rect.m_min, dims);
+      a_stream.WriteArray(curBranch->m_rect.m_max, dims);
 
       a_stream.Write(curBranch->m_data);
     }
@@ -924,7 +930,7 @@ void RTREE_QUAL::InitNode(Node* a_node)
 RTREE_TEMPLATE
 void RTREE_QUAL::InitRect(Rect* a_rect)
 {
-  for(int index = 0; index < NUMDIMS; ++index)
+  for(int index = 0; index < dims; ++index)
   {
     a_rect->m_min[index] = (ELEMTYPE)0;
     a_rect->m_max[index] = (ELEMTYPE)0;
@@ -1006,7 +1012,7 @@ bool RTREE_QUAL::InsertRect(const Branch& a_branch, Node** a_root, int a_level)
   ASSERT(a_root);
   ASSERT(a_level >= 0 && a_level <= (*a_root)->m_level);
 #ifdef _DEBUG
-  for(int index=0; index < NUMDIMS; ++index)
+  for(int index=0; index < dims; ++index)
   {
     ASSERT(a_branch.m_rect.m_min[index] <= a_branch.m_rect.m_max[index]);
   }
@@ -1150,7 +1156,7 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect* a_rectA, const Rec
 
   Rect newRect;
 
-  for(int index = 0; index < NUMDIMS; ++index)
+  for(int index = 0; index < dims; ++index)
   {
     newRect.m_min[index] = Min(a_rectA->m_min[index], a_rectB->m_min[index]);
     newRect.m_max[index] = Max(a_rectA->m_max[index], a_rectB->m_max[index]);
@@ -1201,7 +1207,7 @@ ELEMTYPEREAL RTREE_QUAL::RectVolume(Rect* a_rect)
 
   ELEMTYPEREAL volume = (ELEMTYPEREAL)1;
 
-  for(int index=0; index<NUMDIMS; ++index)
+  for(int index=0; index<dims; ++index)
   {
     volume *= a_rect->m_max[index] - a_rect->m_min[index];
   }
@@ -1221,7 +1227,7 @@ ELEMTYPEREAL RTREE_QUAL::RectSphericalVolume(Rect* a_rect)
   ELEMTYPEREAL sumOfSquares = (ELEMTYPEREAL)0;
   ELEMTYPEREAL radius;
 
-  for(int index=0; index < NUMDIMS; ++index)
+  for(int index=0; index < dims; ++index)
   {
     ELEMTYPEREAL halfExtent = ((ELEMTYPEREAL)a_rect->m_max[index] - (ELEMTYPEREAL)a_rect->m_min[index]) * (ELEMTYPEREAL)0.5;
     sumOfSquares += halfExtent * halfExtent;
@@ -1230,17 +1236,17 @@ ELEMTYPEREAL RTREE_QUAL::RectSphericalVolume(Rect* a_rect)
   radius = (ELEMTYPEREAL)sqrt(sumOfSquares);
 
   // Pow maybe slow, so test for common dims like 2,3 and just use x*x, x*x*x.
-  if(NUMDIMS == 3)
+  if(dims == 3)
   {
     return (radius * radius * radius * m_unitSphereVolume);
   }
-  else if(NUMDIMS == 2)
+  else if(dims == 2)
   {
     return (radius * radius * m_unitSphereVolume);
   }
   else
   {
-    return (ELEMTYPEREAL)(pow(radius, NUMDIMS) * m_unitSphereVolume);
+    return (ELEMTYPEREAL)(pow(radius, dims) * m_unitSphereVolume);
   }
 }
 
@@ -1476,14 +1482,14 @@ void RTREE_QUAL::Classify(int a_index, int a_group, PartitionVars* a_parVars)
 // Returns 1 if record not found, 0 if success.
 // RemoveRect provides for eliminating the root.
 RTREE_TEMPLATE
-bool RTREE_QUAL::RemoveRect(Rect* a_rect, const DATATYPE& a_id, Node** a_root)
+bool RTREE_QUAL::RemoveRect(Rect* a_rect, Callback predicate, Node** a_root)
 {
   ASSERT(a_rect && a_root);
   ASSERT(*a_root);
 
   ListNode* reInsertList = NULL;
 
-  if(!RemoveRectRec(a_rect, a_id, *a_root, &reInsertList))
+  if(!RemoveRectRec(a_rect, predicate, *a_root, &reInsertList))
   {
     // Found and deleted a data item
     // Reinsert any branches from eliminated nodes
@@ -1530,7 +1536,7 @@ bool RTREE_QUAL::RemoveRect(Rect* a_rect, const DATATYPE& a_id, Node** a_root)
 // merges branches on the way back up.
 // Returns 1 if record not found, 0 if success.
 RTREE_TEMPLATE
-bool RTREE_QUAL::RemoveRectRec(Rect* a_rect, const DATATYPE& a_id, Node* a_node, ListNode** a_listNode)
+bool RTREE_QUAL::RemoveRectRec(Rect* a_rect, Callback predicate, Node* a_node, ListNode** a_listNode)
 {
   ASSERT(a_rect && a_node && a_listNode);
   ASSERT(a_node->m_level >= 0);
@@ -1541,7 +1547,7 @@ bool RTREE_QUAL::RemoveRectRec(Rect* a_rect, const DATATYPE& a_id, Node* a_node,
     {
       if(Overlap(a_rect, &(a_node->m_branch[index].m_rect)))
       {
-        if(!RemoveRectRec(a_rect, a_id, a_node->m_branch[index].m_child, a_listNode))
+        if(!RemoveRectRec(a_rect, predicate, a_node->m_branch[index].m_child, a_listNode))
         {
           if(a_node->m_branch[index].m_child->m_count >= MINNODES)
           {
@@ -1564,7 +1570,7 @@ bool RTREE_QUAL::RemoveRectRec(Rect* a_rect, const DATATYPE& a_id, Node* a_node,
   {
     for(int index = 0; index < a_node->m_count; ++index)
     {
-      if(a_node->m_branch[index].m_data == a_id)
+      if(predicate(a_node->m_branch[index].m_data))
       {
         DisconnectBranch(a_node, index); // Must return after this call as count has changed
         return false;
@@ -1581,7 +1587,7 @@ bool RTREE_QUAL::Overlap(Rect* a_rectA, Rect* a_rectB) const
 {
   ASSERT(a_rectA && a_rectB);
 
-  for(int index=0; index < NUMDIMS; ++index)
+  for(int index=0; index < dims; ++index)
   {
     if (a_rectA->m_min[index] > a_rectB->m_max[index] ||
         a_rectB->m_min[index] > a_rectA->m_max[index])
@@ -1609,7 +1615,7 @@ void RTREE_QUAL::ReInsert(Node* a_node, ListNode** a_listNode)
 
 // Search in an index tree or subtree for all data retangles that overlap the argument rectangle.
 RTREE_TEMPLATE
-bool RTREE_QUAL::Search(Node* a_node, Rect* a_rect, int& a_foundCount, std::function<bool (const DATATYPE&)> callback) const
+bool RTREE_QUAL::Search(Node* a_node, Rect* a_rect, int& a_foundCount, Callback callback) const
 {
   ASSERT(a_node);
   ASSERT(a_node->m_level >= 0);
