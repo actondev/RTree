@@ -287,8 +287,8 @@ protected:
   struct Rect {
     // Note: MAXDIMS is stored in memory, even if we use dims (as passed in
     // constructor)
-    ELEMTYPE m_min[MAXDIMS]; ///< Min dimensions of bounding box
-    ELEMTYPE m_max[MAXDIMS]; ///< Max dimensions of bounding box
+    ELEMTYPE m_min[MAXDIMS]{0}; ///< Min dimensions of bounding box
+    ELEMTYPE m_max[MAXDIMS]{0}; ///< Max dimensions of bounding box
   };
 
   /// May be data or may be another subtree
@@ -491,7 +491,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   branch.m_data = a_dataId;
   branch.m_child = NULL;
 
-  for (int axis = 0; axis < dims; ++axis) {
+  for (unsigned int axis = 0; axis < dims; ++axis) {
     branch.m_rect.m_min[axis] = a_min[axis];
     branch.m_rect.m_max[axis] = a_max[axis];
   }
@@ -511,7 +511,7 @@ int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
   Rect rect;
 
-  for (int axis = 0; axis < dims; ++axis) {
+  for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
     rect.m_max[axis] = a_max[axis];
   }
@@ -533,7 +533,7 @@ int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
   Rect rect;
 
-  for (int axis = 0; axis < dims; ++axis) {
+  for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
     rect.m_max[axis] = a_max[axis];
   }
@@ -574,7 +574,7 @@ void RTREE_QUAL::MoveChildren(Node* a_node, const ELEMTYPE *a_offset) {
   for (int index = 0; index < a_node->m_count; ++index) {
     Branch &branch = a_node->m_branch[index];
     Rect &rect = branch.m_rect;
-    for (int i = 0; i < dims; i++) {
+    for (unsigned int i = 0; i < dims; i++) {
       rect.m_min[i] += a_offset[i];
       rect.m_max[i] += a_offset[i];
     }
@@ -1073,7 +1073,7 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect *a_rectA,
 
   Rect newRect;
 
-  for (int index = 0; index < dims; ++index) {
+  for (unsigned int index = 0; index < dims; ++index) {
     newRect.m_min[index] = Min(a_rectA->m_min[index], a_rectB->m_min[index]);
     newRect.m_max[index] = Max(a_rectA->m_max[index], a_rectB->m_max[index]);
   }
@@ -1137,7 +1137,7 @@ ELEMTYPEREAL RTREE_QUAL::RectSphericalVolume(Rect *a_rect) {
   ELEMTYPEREAL sumOfSquares = (ELEMTYPEREAL)0;
   ELEMTYPEREAL radius;
 
-  for (int index = 0; index < dims; ++index) {
+  for (unsigned int index = 0; index < dims; ++index) {
     ELEMTYPEREAL halfExtent = ((ELEMTYPEREAL)a_rect->m_max[index] -
                                (ELEMTYPEREAL)a_rect->m_min[index]) *
                               (ELEMTYPEREAL)0.5;
@@ -1453,7 +1453,7 @@ RTREE_TEMPLATE
 bool RTREE_QUAL::Overlap(Rect *a_rectA, Rect *a_rectB) const {
   ASSERT(a_rectA && a_rectB);
 
-  for (int index = 0; index < dims; ++index) {
+  for (unsigned int index = 0; index < dims; ++index) {
     if (a_rectA->m_min[index] > a_rectB->m_max[index] ||
         a_rectB->m_min[index] > a_rectA->m_max[index]) {
       return false;
@@ -1557,7 +1557,7 @@ typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const {
   for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {
     Branch &branch = m_root->m_branch[branch_id];
     Rect &other_rect = branch.m_rect;
-    for (int index = 0; index < dims; index++) {
+    for (unsigned int index = 0; index < dims; index++) {
       bounds.m_min[index] = Min(bounds.m_min[index], other_rect.m_min[index]);
       bounds.m_max[index] = Max(bounds.m_max[index], other_rect.m_max[index]);
     }
