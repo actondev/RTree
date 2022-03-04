@@ -99,12 +99,12 @@ public:
   void Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
               const DATATYPE &a_dataId);
 
-  /// Remove entry
-  /// \param a_min Min of bounding rect
-  /// \param a_max Max of bounding rect
-  /// \param predicate passing the stored type. Should return true if the node
-  /// should be removed
-  void Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max, Callback predicate);
+  /// Remove entry \param a_min Min of bounding rect \param a_max Max
+  /// of bounding rect \param predicate passing the stored type:
+  /// should return true if node should be removed \return Returns the
+  /// number of entries removed
+  /// TODO this does not update the bounding rects (will later insertions be fine?)
+  int Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max, Callback predicate);
 
   /// Find all within search rectangle
   /// \param a_min Min of search bounding rect
@@ -355,8 +355,8 @@ protected:
   void InitParVars(PartitionVars *a_parVars, int a_maxRects, int a_minFill);
   void PickSeeds(PartitionVars *a_parVars);
   void Classify(int a_index, int a_group, PartitionVars *a_parVars);
-  bool RemoveRect(Rect *a_rect, Callback predicate, Node **a_root);
-  bool RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
+  bool RemoveRect(Node **a_root, Rect *a_rect, int &a_removedCount, Callback predicate);
+  bool RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, Callback predicate,
                      ListNode **a_listNode);
   ListNode *AllocListNode();
   void FreeListNode(ListNode *a_listNode);
@@ -496,7 +496,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 }
 
 RTREE_TEMPLATE
-void RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
+int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
                         Callback predicate) {
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
@@ -511,7 +511,9 @@ void RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
     rect.m_max[axis] = a_max[axis];
   }
 
-  RemoveRect(&rect, predicate, &m_root);
+  int removedCount = 0;
+  RemoveRect(&m_root, &rect, removedCount, predicate);
+  return removedCount;
 }
 
 RTREE_TEMPLATE
@@ -1327,13 +1329,13 @@ void RTREE_QUAL::Classify(int a_index, int a_group, PartitionVars *a_parVars) {
 // Returns true if something removed
 // RemoveRect provides for eliminating the root.
 RTREE_TEMPLATE
-bool RTREE_QUAL::RemoveRect(Rect *a_rect, Callback predicate, Node **a_root) {
+bool RTREE_QUAL::RemoveRect(Node **a_root, Rect *a_rect, int &a_foundCount, Callback predicate ) {
   ASSERT(a_rect && a_root);
   ASSERT(*a_root);
 
   ListNode *reInsertList = NULL;
 
-  if (!RemoveRectRec(a_rect, predicate, *a_root, &reInsertList)) {
+  if (!RemoveRectRec(*a_root, a_rect, a_foundCount, predicate , &reInsertList)) {
     return false; // nothing removed
   }
 
@@ -1370,8 +1372,7 @@ bool RTREE_QUAL::RemoveRect(Rect *a_rect, Callback predicate, Node **a_root) {
 // merges branches on the way back up.
 // Returns true if something removed
 RTREE_TEMPLATE
-bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
-                               ListNode **a_listNode) {
+bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, Callback predicate, ListNode **a_listNode) {
   ASSERT(a_rect && a_node && a_listNode);
   ASSERT(a_node->m_level >= 0);
 
@@ -1380,7 +1381,8 @@ bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
     bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &(a_node->m_branch[index].m_rect))) {
-        if (RemoveRectRec(a_rect, predicate, a_node->m_branch[index].m_child,
+        if (RemoveRectRec(a_node->m_branch[index].m_child, a_rect, a_removedCount,
+                          predicate,
                            a_listNode)) {
           if (a_node->m_branch[index].m_child->m_count >= MINNODES) {
             // child removed, just resize parent rect
@@ -1392,6 +1394,7 @@ bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
             DisconnectBranch(a_node, index);
             // NB: Before remove refactor this was returning
             index--; // have to revisit same index, as now it's swapped with the last item
+            a_removedCount++;
           }
           removed = true;
         }
@@ -1408,6 +1411,7 @@ bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
           index--; // have to revisit same index, as now it's swapped with the last item
+          a_removedCount++;
         }
       }
     }
