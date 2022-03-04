@@ -1516,7 +1516,10 @@ RTREE_TEMPLATE
 typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
-  ASSERT(m_root->m_count > 0);
+  if(m_root->m_count == 0) {
+    Rect bounds;
+    return bounds;
+  }
 
   Rect bounds;
   Branch &first_branch = m_root->m_branch[0];
