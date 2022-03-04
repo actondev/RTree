@@ -1422,7 +1422,6 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
             DisconnectBranch(a_node, index);
             // NB: Before remove refactor this was returning
             index--; // have to revisit same index, as now it's swapped with the last item
-            a_removedCount++;
           }
           removed = true;
         }
@@ -1444,7 +1443,7 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
         }
       }
     }
-    return !removed;
+    return removed;
   }
 }
 
