@@ -76,7 +76,7 @@ class RTree {
 protected:
   uint32_t dims; // set by the constructor
   struct Node;   // Fwd decl.  Used by other internal structs and iterator
-
+  uint32_t count = 0;
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
@@ -493,6 +493,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 
   InsertRect(branch, &m_root, 0);
+  count++;
 }
 
 RTREE_TEMPLATE
@@ -513,6 +514,7 @@ int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
   int removedCount = 0;
   RemoveRect(&m_root, &rect, removedCount, predicate);
+  count -= removedCount;
   return removedCount;
 }
 
@@ -543,9 +545,6 @@ int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
 RTREE_TEMPLATE
 int RTREE_QUAL::Count() {
-  int count = 0;
-  CountRec(m_root, count);
-
   return count;
 }
 
@@ -760,6 +759,7 @@ RTREE_TEMPLATE
 void RTREE_QUAL::RemoveAll() {
   // Delete all existing nodes
   Reset();
+  count = 0;
 
   m_root = AllocNode();
   m_root->m_level = 0;
