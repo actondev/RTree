@@ -1324,7 +1324,7 @@ void RTREE_QUAL::Classify(int a_index, int a_group, PartitionVars *a_parVars) {
 
 // Delete a data rectangle from an index structure.
 // Pass in a pointer to a Rect, the tid of the record, ptr to ptr to root node.
-// Returns 1 if record not found, 0 if success.
+// Returns true if something removed
 // RemoveRect provides for eliminating the root.
 RTREE_TEMPLATE
 bool RTREE_QUAL::RemoveRect(Rect *a_rect, Callback predicate, Node **a_root) {
@@ -1334,42 +1334,41 @@ bool RTREE_QUAL::RemoveRect(Rect *a_rect, Callback predicate, Node **a_root) {
   ListNode *reInsertList = NULL;
 
   if (!RemoveRectRec(a_rect, predicate, *a_root, &reInsertList)) {
-    // Found and deleted a data item
-    // Reinsert any branches from eliminated nodes
-    while (reInsertList) {
-      Node *tempNode = reInsertList->m_node;
-
-      for (int index = 0; index < tempNode->m_count; ++index) {
-        // TODO go over this code. should I use (tempNode->m_level - 1)?
-        InsertRect(tempNode->m_branch[index], a_root, tempNode->m_level);
-      }
-
-      ListNode *remLNode = reInsertList;
-      reInsertList = reInsertList->m_next;
-
-      FreeNode(remLNode->m_node);
-      FreeListNode(remLNode);
-    }
-
-    // Check for redundant root (not leaf, 1 child) and eliminate TODO replace
-    // if with while? In case there is a whole branch of redundant roots...
-    if ((*a_root)->m_count == 1 && (*a_root)->IsInternalNode()) {
-      Node *tempNode = (*a_root)->m_branch[0].m_child;
-
-      ASSERT(tempNode);
-      FreeNode(*a_root);
-      *a_root = tempNode;
-    }
-    return false;
-  } else {
-    return true;
+    return false; // nothing removed
   }
+
+  // removed
+  while (reInsertList) {
+    Node *tempNode = reInsertList->m_node;
+
+    for (int index = 0; index < tempNode->m_count; ++index) {
+      // TODO go over this code. should I use (tempNode->m_level - 1)?
+      InsertRect(tempNode->m_branch[index], a_root, tempNode->m_level);
+    }
+
+    ListNode *remLNode = reInsertList;
+    reInsertList = reInsertList->m_next;
+
+    FreeNode(remLNode->m_node);
+    FreeListNode(remLNode);
+  }
+
+  // Check for redundant root (not leaf, 1 child) and eliminate TODO replace
+  // if with while? In case there is a whole branch of redundant roots...
+  if ((*a_root)->m_count == 1 && (*a_root)->IsInternalNode()) {
+    Node *tempNode = (*a_root)->m_branch[0].m_child;
+
+    ASSERT(tempNode);
+    FreeNode(*a_root);
+    *a_root = tempNode;
+  }
+  return true;
 }
 
 // Delete a rectangle from non-root part of an index structure.
 // Called by RemoveRect.  Descends tree recursively,
 // merges branches on the way back up.
-// Returns 1 if record not found, 0 if success.
+// Returns true if something removed
 RTREE_TEMPLATE
 bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
                                ListNode **a_listNode) {
@@ -1378,9 +1377,10 @@ bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
 
   if (a_node->IsInternalNode()) {
     // not a leaf node
+    bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &(a_node->m_branch[index].m_rect))) {
-        if (!RemoveRectRec(a_rect, predicate, a_node->m_branch[index].m_child,
+        if (RemoveRectRec(a_rect, predicate, a_node->m_branch[index].m_child,
                            a_listNode)) {
           if (a_node->m_branch[index].m_child->m_count >= MINNODES) {
             // child removed, just resize parent rect
@@ -1389,25 +1389,29 @@ bool RTREE_QUAL::RemoveRectRec(Rect *a_rect, Callback predicate, Node *a_node,
           } else {
             // child removed, not enough entries in node, eliminate node
             ReInsert(a_node->m_branch[index].m_child, a_listNode);
-            DisconnectBranch(
-                a_node,
-                index); // Must return after this call as count has changed
+            DisconnectBranch(a_node, index);
+            // NB: Before remove refactor this was returning
+            index--; // have to revisit same index, as now it's swapped with the last item
           }
-          return false;
+          removed = true;
         }
       }
     }
-    return true;
+    return removed;
   } else {
     // A leaf node
+    bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
-      if (predicate(a_node->m_branch[index].m_data)) {
-        // Must return after this call as count has changed
-        DisconnectBranch(a_node, index);
-        return false;
+      if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
+        if (predicate(a_node->m_branch[index].m_data)) {
+          removed = true;
+          DisconnectBranch(a_node, index);
+          // NB: Before remove refactor this was returning
+          index--; // have to revisit same index, as now it's swapped with the last item
+        }
       }
     }
-    return true;
+    return !removed;
   }
 }
 
