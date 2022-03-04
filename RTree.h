@@ -119,6 +119,9 @@ public:
   /// Remove all entries from tree
   void RemoveAll();
 
+  /// Move all nodes by an offset
+  void MoveAll(const ELEMTYPE *a_offset);
+
   /// Count the data elements in this container.  This is slow as no internal
   /// counter is maintained.
   int Count();
@@ -367,6 +370,7 @@ protected:
   void RemoveAllRec(Node *a_node);
   void Reset();
   void CountRec(Node *a_node, int &a_count);
+  void MoveChildren(Node* a_node, const ELEMTYPE *a_offset);
 
   bool SaveRec(Node *a_node, RTFileStream &a_stream);
   bool LoadRec(Node *a_node, RTFileStream &a_stream);
@@ -558,6 +562,25 @@ void RTREE_QUAL::CountRec(Node *a_node, int &a_count) {
   } else // A leaf node
   {
     a_count += a_node->m_count;
+  }
+}
+
+RTREE_TEMPLATE
+void RTREE_QUAL::MoveChildren(Node* a_node, const ELEMTYPE *a_offset) {
+  ASSERT(a_node);
+  ASSERT(a_node->m_level >= 0);
+  ASSERT(a_offset);
+
+  for (int index = 0; index < a_node->m_count; ++index) {
+    Branch &branch = a_node->m_branch[index];
+    Rect &rect = branch.m_rect;
+    for (int i = 0; i < dims; i++) {
+      rect.m_min[i] += a_offset[i];
+      rect.m_max[i] += a_offset[i];
+    }
+    if (a_node->IsInternalNode()) {
+      MoveChildren(branch.m_child, a_offset);
+    }
   }
 }
 
@@ -763,6 +786,11 @@ void RTREE_QUAL::RemoveAll() {
 
   m_root = AllocNode();
   m_root->m_level = 0;
+}
+
+RTREE_TEMPLATE
+void RTREE_QUAL::MoveAll(const ELEMTYPE *a_offset) {
+  MoveChildren(m_root, a_offset);
 }
 
 RTREE_TEMPLATE
