@@ -71,7 +71,7 @@ class RTree {
   static_assert(std::numeric_limits<ELEMTYPEREAL>::is_iec559,
                 "'ELEMTYPEREAL' accepts floating-point types only");
 
-  typedef std::function<bool(const DATATYPE &)> Callback;
+  typedef std::function<bool(const DATATYPE &, const ELEMTYPE*, const ELEMTYPE*)> Callback;
 
 protected:
   uint32_t dims; // set by the constructor
@@ -1434,7 +1434,8 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
     bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
-        if (predicate(a_node->m_branch[index].m_data)) {
+        Branch& branch = a_node->m_branch[index];
+        if (predicate(branch.m_data, branch.m_rect.m_min, branch.m_rect.m_max )) {
           removed = true;
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
@@ -1497,10 +1498,11 @@ bool RTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
     // This is a leaf node
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
-        DATATYPE &id = a_node->m_branch[index].m_data;
+        Branch& branch = a_node->m_branch[index];
+        DATATYPE &data = branch.m_data;
         ++a_foundCount;
 
-        if (callback && !callback(id)) {
+        if (!callback(data, branch.m_rect.m_min, branch.m_rect.m_max)) {
           return false; // Don't continue searching
         }
       }
