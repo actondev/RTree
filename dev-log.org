@@ -1,0 +1,11 @@
+#+PROPERTY: header-args:sh :session *rtree*
+
+* <2022-03-10 Thu> adding tests & refactoring
+  #+begin_src sh
+meson wrap search catch
+meson wrap info catch2
+
+meson wrap install catch2
+
+meson configure build -Dtest=true
+  #+end_src
