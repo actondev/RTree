@@ -19,6 +19,7 @@ run_tests = executable(
   test_src,
   dependencies : [
     catch2_dep,
+    RTree_dep,
   ],
   cpp_args: [
   ]

@@ -9,3 +9,8 @@ meson wrap install catch2
 
 meson configure build -Dtest=true
   #+end_src
+
+  vector of vectors & reserve: https://stackoverflow.com/questions/16220915/how-to-reserve-memory-for-vector-of-vector
+
+  used https://github.com/hebaishi/easy-cpp-print for printing out std::vector, std::vector<std::vector<t>> etc!
+  no licence, oh well
