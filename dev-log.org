@@ -14,3 +14,107 @@ meson configure build -Dtest=true
 
   used https://github.com/hebaishi/easy-cpp-print for printing out std::vector, std::vector<std::vector<t>> etc!
   no licence, oh well
+
+
+** printing out vectors etc
+   or just https://github.com/hebaishi/easy-cpp-print 
+   #+begin_src cpp
+template<typename T>
+void print_vec(std::ostream &os, const std::vector<T> &vec) {
+  auto size = vec.size();
+  os << "{";
+  for(auto i=0; i < size - 1; i++) {
+    os << vec[i] << ",";
+  }
+  if(size > 0) {
+    os << vec[size-1];
+  }
+  os << "}";
+}
+
+std::ostream &operator<<(std::ostream &os, const std::vector<int> &vec) {
+  print_vec<int>(os, vec);
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const std::vector<double> &vec) {
+  print_vec<double>(os, vec);
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const std::vector<std::vector<double>> &vec) {
+  cerr << "{";
+  for(const auto& x : vec) print_vec<double>(os, x);
+  cerr << "}" << endl;
+  return os;
+}
+   #+end_src
+
+** test: sorting vector and equality
+   #+begin_src cpp
+std::sort(found.begin(), found.end(),
+          [](const Type &a, const Type &b) {
+            const auto size = std::min(a.size(), b.size());
+            for(auto i=0; i < size; i++) {
+              if ( a[i] < b[i]) {
+                return true;
+              }
+            }
+            return false;
+          });
+   #+end_src
+
+   
+** making grid
+   #+begin_src cpp
+std::vector<std::array<double, DIMS>> make_grid_template(int length)
+{
+  std::vector<std::array<double, DIMS>> res;
+  int size = pow(length, DIMS);
+  res.reserve(size);
+  for (int i = 0; i < size; i++)
+  {
+    auto &el = res[i];
+    for (int dim = 0; dim < DIMS; dim++)
+    {
+      int denum = pow(length, dim);
+      int x = (int)(i / denum) % length;
+      int mod = x % length;
+      el[DIMS - dim - 1] = mod;
+    }
+    cerr << "  ";
+    for(int i=0; i< DIMS; i++) {
+      cerr << el[i] << ",";
+    }
+    cerr << endl;
+  }
+
+  return res;
+}
+
+std::vector<std::vector<double>> make_grid(int length, int dims = 2)
+{
+  std::vector<std::vector<double>> res;
+  int size = pow(length, dims);
+  res.resize(size);
+  for (int i = 0; i < size; i++)
+  {
+    auto &el = res[i];
+    el.resize(dims); // resize or reserve? kind of same?
+    for (int dim = 0; dim < dims; dim++)
+    {
+      int denum = pow(length, dim);
+      int x = (int)(i / denum) % length;
+      int mod = x % length;
+      el[dims - dim - 1] = mod;
+    }
+    cerr << "  ";
+    for(int i=0; i< dims; i++) {
+      cerr << el[i] << ",";
+    }
+    cerr << endl;
+  }
+
+  return res;
+}
+   #+end_src
