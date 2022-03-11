@@ -17,6 +17,7 @@ std::string pp(const T& x)
 
 using Point = std::vector<double>;
 using Grid = std::vector<Point>;
+using Callback = std::function<bool(Point, const double *, const double *)>;
 
 /**
  * see https://stackoverflow.com/a/49514906/8720686
@@ -71,7 +72,7 @@ TEST_CASE("rtree basic ops")
   REQUIRE(tree.Count() == pow(length, dims));
 
   std::vector<Point> found;
-  using Callback =  std::function<bool(Point, const double*,const double*)>;
+  
   Callback cb = [&found](Point node, const double* low, const double* high) {
     found.push_back(node);
     return true;
@@ -107,4 +108,47 @@ TEST_CASE("rtree basic ops")
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
   REQUIRE(tree.Count() == size_init - 4);
   
+}
+
+
+// FIXME
+TEST_CASE("bounds after removals & insertions")
+{
+  // this is needed as template param in RTree
+  // that's what I want to solve :)
+  int length = 10;
+  auto grid = make_grid(length, dims);
+  cout << pp(grid) << endl;
+
+  RTree<Point, double, 2> tree = grid_to_rtree<2>(grid);
+
+  Point expected_min = {0,0};
+  Point expected_max = {9,9};
+
+  Point actual_min;
+  Point actual_max;
+  auto bounds = tree.Bounds();
+  actual_min.assign(bounds.m_min, bounds.m_min+2);
+  actual_max.assign(bounds.m_max, bounds.m_max+2);
+
+  REQUIRE(actual_min == expected_min);
+  REQUIRE(actual_max == expected_max);
+
+  Callback remove_cb = [](Point node, const double *low, const double *high) {
+    return true;
+  };
+  double low[dims] = {0, 0};
+  double high[dims] = {2, 2};
+
+  tree.Remove(low, high, remove_cb);
+
+  bounds = tree.Bounds();
+  actual_min.assign(bounds.m_min, bounds.m_min + 2);
+  actual_max.assign(bounds.m_max, bounds.m_max + 2);
+
+  expected_min = {3,3};
+  // expected_max = {9,9}; // same
+
+  REQUIRE(actual_min == expected_min);
+  REQUIRE(actual_max == expected_max);
 }
