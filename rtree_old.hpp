@@ -1,11 +1,5 @@
-#include <vector>
-#include <iostream>
-using std::cerr;
-using std::cout;
-using std::endl;
-
-#ifndef RTREE_H
-#define RTREE_H
+#ifndef RTREE_OLD_H
+#define RTREE_OLD_H
 
 // NOTE This file compiles under MSVC 6 SP5 and MSVC .Net 2003 it may not work
 // on other compilers without modification.
@@ -33,13 +27,11 @@ using std::endl;
 // RTree.h
 //
 
-// datatype is what is stored in the tree (for example a gui element)
-// elemtype is double or float
 #define RTREE_TEMPLATE                                                         \
-  template <class DATATYPE, class ELEMTYPE, class ELEMTYPEREAL,   \
+  template <class DATATYPE, class ELEMTYPE, int MAXDIMS, class ELEMTYPEREAL,   \
             int TMAXNODES, int TMINNODES>
 #define RTREE_QUAL                                                             \
-  RTree<DATATYPE, ELEMTYPE, ELEMTYPEREAL, TMAXNODES, TMINNODES>
+  RTreeTemplate<DATATYPE, ELEMTYPE, MAXDIMS, ELEMTYPEREAL, TMAXNODES, TMINNODES>
 
 #define RTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower
                                    // on some systems
@@ -69,10 +61,10 @@ class RTFileStream; // File I/O helper class, look below for implementation and
 ///        memory array similar to MFC CArray or STL Vector for returning search
 ///        query result.
 ///
-template <class DATATYPE, class ELEMTYPE = double,
+template <class DATATYPE, class ELEMTYPE, int MAXDIMS = 3,
           class ELEMTYPEREAL = ELEMTYPE, int TMAXNODES = 8,
           int TMINNODES = TMAXNODES / 2>
-class RTree {
+class RTreeTemplate {
   static_assert(std::numeric_limits<ELEMTYPEREAL>::is_iec559,
                 "'ELEMTYPEREAL' accepts floating-point types only");
 
@@ -91,10 +83,10 @@ public:
   };
 
 public:
-  RTree() = delete;
-  RTree(int dims);
-  RTree(const RTree &other);
-  virtual ~RTree();
+  RTreeTemplate();
+  RTreeTemplate(int dims);
+  RTreeTemplate(const RTreeTemplate &other);
+  virtual ~RTreeTemplate();
 
   /// Insert entry
   /// \param a_min Min of bounding rect
@@ -144,22 +136,10 @@ public:
 protected:
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
-    std::vector<ELEMTYPE> m_min; ///< Min dimensions of bounding box
-    std::vector<ELEMTYPE> m_max; ///< Max dimensions of bounding box
-    Rect() = delete;
-    Rect(const RTREE_QUAL* tree)
-        : m_min(tree->Dimensions()),
-          m_max(tree->Dimensions())
-    {
-      // cout << "rect ctor " <<tree->Dimensions() << endl;
-    }
-    Rect(int dims)
-        : m_min(dims),
-          m_max(dims)
-    {
-      // cout << "rect dims ctor (from Branch copy ctor) " << endl;
-    }
-    // Rect(Rect&& other) = default;
+    // Note: MAXDIMS is stored in memory, even if we use dims (as passed in
+    // constructor)
+    ELEMTYPE m_min[MAXDIMS]{0}; ///< Min dimensions of bounding box
+    ELEMTYPE m_max[MAXDIMS]{0}; ///< Max dimensions of bounding box
   };
 
   /// May be data or may be another subtree
@@ -169,27 +149,6 @@ protected:
     Rect m_rect;     ///< Bounds
     Node *m_child;   ///< Child node
     DATATYPE m_data; ///< Data Id
-    Branch() = delete;
-    Branch(const RTREE_QUAL* tree)
-        : m_rect(tree){
-
-    };
-    Branch(int dims)
-        : m_rect(dims)  {
-      // cout << "Branch dims ctor" << endl;
-          };
-    Branch(const Branch &other)
-        : m_rect(other.m_rect.m_min.size()){
-      // cout << "Branch copy ctor" << endl;
-          };
-
-    // TODO learn a thing or two about move semantics !!
-    // Branch(Branch&& other)
-    //     : m_rect(other.m_rect.size())
-    //     // m_rect(std::move(other.m_rect))
-    // {
-    //   cout << "Branch move ctor" << endl;
-    // };
   };
 
   /// Node for each branch level
@@ -199,15 +158,9 @@ protected:
     }                                        // Not a leaf, but a internal node
     bool IsLeaf() { return (m_level == 0); } // A leaf, contains data
 
-    int m_count; ///< Count
-    int m_level; ///< Leaf is zero, others positive
-    std::vector<Branch> m_branch;
-    Node() = delete;
-    Node(const RTREE_QUAL *tree)
-        : m_branch(MAXNODES, Branch{tree}){
-      cout << "Node ctor" <<endl;
-      // TODO a node can have its own allocator of branches
-    };
+    int m_count;               ///< Count
+    int m_level;               ///< Leaf is zero, others positive
+    Branch m_branch[MAXNODES]; ///< Branch
   };
 
   /// A link list of nodes for reinsertion after a delete operation
@@ -226,18 +179,11 @@ protected:
     int m_count[2];
     Rect m_cover[2];
     ELEMTYPEREAL m_area[2];
-    std::vector<Branch> m_branchBuf;
+
+    Branch m_branchBuf[MAXNODES + 1];
     int m_branchCount;
     Rect m_coverSplit;
     ELEMTYPEREAL m_coverSplitArea;
-    PartitionVars() = delete;
-    PartitionVars(const RTREE_QUAL* tree)
-        : m_cover{{tree}, {tree}},
-          m_coverSplit{tree},
-          m_branchBuf(MAXNODES +1, Branch{tree})
-    {
-      // cout << "PartitionVars ctor" << endl;
-    };
   };
 
   Node *AllocNode();
@@ -292,7 +238,11 @@ public:
 
 
 RTREE_TEMPLATE
-RTREE_QUAL::RTree(int dims) {
+RTREE_QUAL::RTreeTemplate() : RTreeTemplate(MAXDIMS) {}
+
+RTREE_TEMPLATE
+RTREE_QUAL::RTreeTemplate(int dims) {
+  ASSERT(dims <= MAXDIMS);
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
   this->dims = dims;
@@ -319,7 +269,7 @@ RTREE_QUAL::RTree(int dims) {
 // }
 
 RTREE_TEMPLATE
-RTREE_QUAL::~RTree() {
+RTREE_QUAL::~RTreeTemplate() {
   Reset(); // Free, or reset node memory
 }
 
@@ -332,7 +282,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  Branch branch(this);
+  Branch branch;
   branch.m_data = a_dataId;
   branch.m_child = NULL;
 
@@ -354,7 +304,7 @@ int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  Rect rect(this);
+  Rect rect;
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
@@ -376,7 +326,7 @@ int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  Rect rect(this);
+  Rect rect;
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
@@ -454,7 +404,7 @@ void RTREE_QUAL::RemoveAllRec(Node *a_node) {
 RTREE_TEMPLATE
 typename RTREE_QUAL::Node *RTREE_QUAL::AllocNode() {
   Node *newNode;
-  newNode = new Node(this);
+  newNode = new Node;
   InitNode(newNode);
   return newNode;
 }
@@ -529,7 +479,7 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
       // so we have to re-calculate the bounding boxes of each node
       a_node->m_branch[index].m_rect =
           NodeCover(a_node->m_branch[index].m_child);
-      Branch branch(this);
+      Branch branch;
       branch.m_child = otherNode;
       branch.m_rect = NodeCover(otherNode);
 
@@ -573,7 +523,7 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
     Node *newRoot = AllocNode();
     newRoot->m_level = (*a_root)->m_level + 1;
 
-    Branch branch(this);
+    Branch branch;
 
     // add old root node as a child of the new root
     branch.m_rect = NodeCover(*a_root);
@@ -661,7 +611,7 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
   ELEMTYPEREAL area;
   ELEMTYPEREAL bestArea;
   int best = 0;
-  Rect tempRect(this);
+  Rect tempRect;
 
   for (int index = 0; index < a_node->m_count; ++index) {
     Rect *curRect = &a_node->m_branch[index].m_rect;
@@ -688,7 +638,7 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect *a_rectA,
                                                   const Rect *a_rectB) {
   ASSERT(a_rectA && a_rectB);
 
-  Rect newRect(this);
+  Rect newRect;
 
   for (unsigned int index = 0; index < dims; ++index) {
     newRect.m_min[index] = Min(a_rectA->m_min[index], a_rectB->m_min[index]);
@@ -710,7 +660,7 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
 
   // Could just use local here, but member or external is faster since it is
   // reused
-  PartitionVars localVars(this);
+  PartitionVars localVars;
   PartitionVars *parVars = &localVars;
 
   // Load all the branches into a buffer, initialize old node
@@ -1051,7 +1001,7 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch& branch = a_node->m_branch[index];
-        if (predicate(branch.m_data, branch.m_rect.m_min.data(), branch.m_rect.m_max.data() )) {
+        if (predicate(branch.m_data, branch.m_rect.m_min, branch.m_rect.m_max )) {
           removed = true;
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
@@ -1118,7 +1068,7 @@ bool RTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
         DATATYPE &data = branch.m_data;
         ++a_foundCount;
 
-        if (!callback(data, branch.m_rect.m_min.data(), branch.m_rect.m_max.data())) {
+        if (!callback(data, branch.m_rect.m_min, branch.m_rect.m_max)) {
           return false; // Don't continue searching
         }
       }
@@ -1163,11 +1113,11 @@ typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
   if(m_root->m_count == 0) {
-    Rect bounds(this);
+    Rect bounds;
     return bounds;
   }
 
-  Rect bounds(this);
+  Rect bounds;
   Branch &first_branch = m_root->m_branch[0];
   bounds = first_branch.m_rect; // init
   for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {
@@ -1230,4 +1180,4 @@ void RTREE_QUAL::CopyRec(Node *current, Node *other) {
 #undef RTREE_TEMPLATE
 #undef RTREE_QUAL
 
-#endif // RTREE_H
+#endif // RTREE_OLD_H

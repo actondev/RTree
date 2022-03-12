@@ -1,0 +1,8 @@
+#+PROPERTY: header-args:sh :session *rtree*
+
+#+begin_src sh
+rm -rf build
+meson setup build
+
+meson test -C build -v
+#+end_src
