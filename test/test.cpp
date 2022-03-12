@@ -134,8 +134,10 @@ TEST_CASE("bounds after removals & insertions") {
   Point actual_min;
   Point actual_max;
   auto bounds = tree.Bounds();
-  actual_min = bounds.m_min;
-  actual_max = bounds.m_max;
+  actual_min.assign(bounds.m_min, bounds.m_min + 2);
+  actual_max.assign(bounds.m_max, bounds.m_max + 2);
+  // actual_min.assign( = bounds.m_min;
+  // actual_max = bounds.m_max;
 
   REQUIRE(actual_min == expected_min);
   REQUIRE(actual_max == expected_max);
@@ -149,8 +151,8 @@ TEST_CASE("bounds after removals & insertions") {
   tree.Remove(low, high, remove_cb);
 
   bounds = tree.Bounds();
-  actual_min = bounds.m_min;
-  actual_max = bounds.m_max;
+  actual_min.assign(bounds.m_min, bounds.m_min + 2);
+  actual_max.assign(bounds.m_max, bounds.m_max + 2);
 
   expected_min = {3, 3};
   // expected_max = {9,9}; // same
@@ -160,15 +162,7 @@ TEST_CASE("bounds after removals & insertions") {
   // REQUIRE(actual_max == expected_max);
 }
 
-TEST_CASE("benchmark", "[benchmark]") {
-  auto grid = make_grid(100, dims); // 100x100=>10k points
-  // cout << pp(grid.points) << endl;
 
-  auto t1 = high_resolution_clock::now();
-  RTree<Point> tree = grid_to_rtree(grid);
-  auto t2 = high_resolution_clock::now();
-  cout << "init took " << duration_ms(t2 - t1) << "ms" << endl;
-}
 template <int DIMS>
 std::vector<std::array<double, DIMS>> make_grid_template(int length) {
   std::vector<std::array<double, DIMS>> res;
@@ -197,6 +191,7 @@ RTreeTemplate<Point, double, 2> grid_to_rtree_template(const Grid &grid) {
 
 TEST_CASE("benchmark template version", "[benchmark]") {
   auto grid = make_grid(100, dims); // 100x100=>10k points
+  // 1000x1000 (1M) => 7s
   // cout << pp(grid.points) << endl;
 
   auto t1 = high_resolution_clock::now();
@@ -205,8 +200,21 @@ TEST_CASE("benchmark template version", "[benchmark]") {
   cout << "init templ took " << duration_ms(t2 - t1) << "ms" << endl;
 }
 
+TEST_CASE("benchmark", "[benchmark]") {
+  // TODO until 2 it's working. then crash
+  auto grid = make_grid(100, dims); // 100x100=>10k points
+  // cout << pp(grid.points) << endl;
+
+  auto t1 = high_resolution_clock::now();
+  RTree<Point> tree = grid_to_rtree(grid);
+  auto t2 = high_resolution_clock::now();
+  cout << "init took " << duration_ms(t2 - t1) << "ms" << endl;
+}
+
+
+
 TEST_CASE("allocations", "[.temp]") {
-  auto grid = make_grid(10, dims);
+  auto grid = make_grid(2, dims);
   // cout << pp(grid.points) << endl;
 
   auto t1 = high_resolution_clock::now();
@@ -216,7 +224,7 @@ TEST_CASE("allocations", "[.temp]") {
 }
 
 TEST_CASE("allocations template", "[.temp]") {
-  auto grid = make_grid(10, dims);
+  auto grid = make_grid(2, dims);
   // cout << pp(grid.points) << endl;
 
   auto t1 = high_resolution_clock::now();

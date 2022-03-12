@@ -1,4 +1,6 @@
+#include <optional>
 #include <vector>
+#include <cstddef>
 #include <iostream>
 using std::cerr;
 using std::cout;
@@ -85,6 +87,7 @@ protected:
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
+  
   enum {
     MAXNODES = TMAXNODES, ///< Max elements in node
     MINNODES = TMINNODES, ///< Min elements in node
@@ -144,22 +147,31 @@ public:
 protected:
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
-    std::vector<ELEMTYPE> m_min; ///< Min dimensions of bounding box
-    std::vector<ELEMTYPE> m_max; ///< Max dimensions of bounding box
+    double* m_min; ///< Min dimensions of bounding box
+    double* m_max; ///< Max dimensions of bounding box
     Rect() = delete;
+    int dims;
     Rect(const RTREE_QUAL* tree)
-        : m_min(tree->Dimensions()),
-          m_max(tree->Dimensions())
+        : Rect(tree->Dimensions())
     {
       // cout << "rect ctor " <<tree->Dimensions() << endl;
     }
     Rect(int dims)
-        : m_min(dims),
-          m_max(dims)
+        :dims(dims)
     {
-      // cout << "rect dims ctor (from Branch copy ctor) " << endl;
+      // cout << "rect ctor dims " << dims << endl;
+      m_min = new double[dims];
+      m_max = new double[dims];
+      std::fill(m_min, m_min + dims, 0);
+      std::fill(m_max, m_max + dims, 0);
     }
-    // Rect(Rect&& other) = default;
+    Rect(const Rect& other)
+        : Rect(other.dims){
+          std::copy(other.m_min, other.m_min + dims, m_min);
+          std::copy(other.m_max, other.m_max + dims, m_max);
+      // cout << "rect copy ctor"<< endl;
+      
+    };
   };
 
   /// May be data or may be another subtree
@@ -168,28 +180,47 @@ protected:
   struct Branch {
     Rect m_rect;     ///< Bounds
     Node *m_child;   ///< Child node
-    DATATYPE m_data; ///< Data Id
+    // Note: made it optional initially cause of other issues,
+    // but I suppose it's useful: what if the stored datatype does not have a default constructor?
+    std::optional<DATATYPE> m_data; ///< Data Id
+    int m_dims;
     Branch() = delete;
     Branch(const RTREE_QUAL* tree)
-        : m_rect(tree){
-
-    };
+        : Branch(tree->Dimensions()) {
+    }
     Branch(int dims)
         : m_rect(dims)  {
+      m_dims = dims;
       // cout << "Branch dims ctor" << endl;
           };
     Branch(const Branch &other)
-        : m_rect(other.m_rect.m_min.size()){
+        : Branch(other.m_dims){
       // cout << "Branch copy ctor" << endl;
           };
 
     // TODO learn a thing or two about move semantics !!
+    // disabled this cause was getting problems with copy assignment having bugs?
+    // TODO move rect here
     // Branch(Branch&& other)
-    //     : m_rect(other.m_rect.size())
-    //     // m_rect(std::move(other.m_rect))
-    // {
-    //   cout << "Branch move ctor" << endl;
+    //     : m_rect(m_dims) {
+    //       cout << "Branch move ctor" << endl;
     // };
+
+    // copy assignment operator
+    // hm.. TODO copy ctor for Rect?
+  //   Branch& operator=(const Branch &rhs) {
+  //     // TODO fix this one. copy data??
+  //     // cout << "branch copy assignment operator" << endl;
+  //     m_rect.m_min = rhs.m_rect.m_min;
+  //     m_rect.m_max = rhs.m_rect.m_max;
+  //     m_rect.dims = rhs.m_rect.dims;
+  //     m_child = rhs.m_child;
+  //     if(rhs.m_data) {
+  //       cout << "copy assignment, can't move data??" << endl;
+  //       m_data = rhs.m_data;
+  //     };
+  //     return *this;
+  //   }
   };
 
   /// Node for each branch level
@@ -201,13 +232,32 @@ protected:
 
     int m_count; ///< Count
     int m_level; ///< Leaf is zero, others positive
-    std::vector<Branch> m_branch;
+    Branch* m_branch; // we need MAXNODES branches
     Node() = delete;
+    int dims;
     Node(const RTREE_QUAL *tree)
-        : m_branch(MAXNODES, Branch{tree}){
-      cout << "Node ctor" <<endl;
-      // TODO a node can have its own allocator of branches
+        : Node(tree->Dimensions()) { };
+    Node(int dims) :dims(dims) {
+      // TODO a branch can have it's allocator
+      // TODO also maxnodes can be ctor argugment. only DATATYPE *needs* to be a template argument
+      m_branch = (Branch*)malloc(MAXNODES * sizeof(Branch));
+      // m_branch = new Branch[MAXNODES]{tree->Dimensions()};
+      for(int i=0; i<MAXNODES; i++) {
+        // hmm move semantics could be used instead of placement new
+        // but had problems with move & copy assignment definitions
+        // Branch b{dims};
+        // m_branch[i] = std::move(b);
+        // new((void*)(m_branch+i)) Branch(dims);
+        new(m_branch+i) Branch(dims);
+      }
+      // cout << "Node ctor done" <<endl;
+    }
+    Node(const Node &other) : Node(other.dims) {
+      cout << "Node copy ctor" << endl;
     };
+    ~Node() {
+      // delete m_branch;
+    }
   };
 
   /// A link list of nodes for reinsertion after a delete operation
@@ -238,6 +288,9 @@ protected:
     {
       // cout << "PartitionVars ctor" << endl;
     };
+    ~PartitionVars() {
+      // cout << "PartitionVars dtor" << endl;
+    }
   };
 
   Node *AllocNode();
@@ -503,7 +556,9 @@ RTREE_TEMPLATE
 bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
                                Node **a_newNode, int a_level) {
   ASSERT(a_node && a_newNode);
-  ASSERT(a_level >= 0 && a_level <= a_node->m_level);
+  ASSERT(a_level >= 0);
+  // TODO a_node segmentation fault?
+  ASSERT(a_level <= a_node->m_level);
 
   // recurse until we reach the correct level for the new record. data records
   // will always be called with a_level == 0 (leaf)
@@ -600,6 +655,7 @@ RTREE_TEMPLATE
 typename RTREE_QUAL::Rect RTREE_QUAL::NodeCover(Node *a_node) {
   ASSERT(a_node);
 
+  // TODO here a_node->m_branch[0].m_rect has dims 1836216166
   Rect rect = a_node->m_branch[0].m_rect;
   for (int index = 1; index < a_node->m_count; ++index) {
     rect = CombineRect(&rect, &(a_node->m_branch[index].m_rect));
@@ -1051,7 +1107,7 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch& branch = a_node->m_branch[index];
-        if (predicate(branch.m_data, branch.m_rect.m_min.data(), branch.m_rect.m_max.data() )) {
+        if (predicate(branch.m_data.value(), branch.m_rect.m_min, branch.m_rect.m_max)) {
           removed = true;
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
@@ -1115,10 +1171,10 @@ bool RTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch& branch = a_node->m_branch[index];
-        DATATYPE &data = branch.m_data;
+        DATATYPE &data = branch.m_data.value();
         ++a_foundCount;
 
-        if (!callback(data, branch.m_rect.m_min.data(), branch.m_rect.m_max.data())) {
+        if (!callback(data, branch.m_rect.m_min, branch.m_rect.m_max)) {
           return false; // Don't continue searching
         }
       }

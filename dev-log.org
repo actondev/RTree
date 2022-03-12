@@ -118,3 +118,15 @@ std::vector<std::vector<double>> make_grid(int length, int dims = 2)
   return res;
 }
    #+end_src
+
+* <2022-03-13 Sun> runtime only size
+  started with using std::vector (for some reason) to store the Rects.. the result was timing ~ *10.
+  Ofourse that was the first iteration, and then wanted to use some allocator:
+  - a node has MAXNODES (default 8) branches (TODO fix this naming)
+  - each branch has a rect: a rect is a vector of DIMS elements
+
+  thus, I could preallocate =MAXNODES*(sizeof(Branch) + DIMS*sizeof(double))= , and then it can be used by all the branches (placement new) & from their Rects (new double[DIMS])
+
+  <2022-03-13 Sun> fixes some issues: still though completely oblivious wrt move semantics, copy assignment etc..
+
+  also see https://www.geeksforgeeks.org/structure-member-alignment-padding-and-data-packing/
