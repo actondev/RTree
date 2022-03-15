@@ -928,6 +928,9 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
   InitParVars(a_parVars, a_parVars->m_branchCount, a_minFill);
   PickSeeds(a_parVars);
 
+  Rect rect0(this);
+  Rect rect1(this);
+
   while (
       ((a_parVars->m_count[0] + a_parVars->m_count[1]) < a_parVars->m_total) &&
       (a_parVars->m_count[0] < (a_parVars->m_total - a_parVars->m_minFill)) &&
@@ -936,8 +939,6 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
     for (int index = 0; index < a_parVars->m_total; ++index) {
       if (PartitionVars::NOT_TAKEN == a_parVars->m_partition[index]) {
         Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
-        Rect rect0(this);
-        Rect rect1(this);
         combine_rects(&rect0, curRect, &a_parVars->m_cover[0]);
         combine_rects(&rect1, curRect, &a_parVars->m_cover[1]);
 
