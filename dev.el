@@ -33,7 +33,9 @@
    ;;
    ])
 
+(setq-local aod-do/action #'rtree)
+
 (comment "custom actions"
-	 (setq-local aod-do/action #'rtree)
+	 
 	 (aod-do/register-action #'rtree)
 	 )

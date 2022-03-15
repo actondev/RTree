@@ -153,6 +153,7 @@ sudo apt install linux-cloud-tools-generic
   #+end_src
 
   #+begin_src sh
+rm -rf callgrind.out.*
 valgrind --tool=callgrind ./build/test/run-tests "benchmark template version"
 valgrind --tool=callgrind ./build/test/run-tests "benchmark"
   #+end_src

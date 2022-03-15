@@ -329,6 +329,7 @@ protected:
     PartitionVars(const RTREE_QUAL* tree)
         : m_cover{{tree}, {tree}},
           m_coverSplit{tree},
+          // TODO m_branchBuf with allocator?
           m_branchBuf(MAXNODES +1, Branch{tree})
     {
       // cout << "PartitionVars ctor" << endl;
@@ -602,7 +603,6 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
                                Node **a_newNode, int a_level) {
   ASSERT(a_node && a_newNode);
   ASSERT(a_level >= 0);
-  // TODO a_node segmentation fault?
   ASSERT(a_level <= a_node->m_level);
 
   // recurse until we reach the correct level for the new record. data records
@@ -698,8 +698,6 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
 RTREE_TEMPLATE
 typename RTREE_QUAL::Rect RTREE_QUAL::NodeCover(Node *a_node) {
   ASSERT(a_node);
-
-  // TODO here a_node->m_branch[0].m_rect has dims 1836216166
   Rect rect = a_node->m_branch[0].m_rect;
   for (int index = 1; index < a_node->m_count; ++index) {
     combine_rects(&rect, &rect, &(a_node->m_branch[index].m_rect));

@@ -190,7 +190,7 @@ RTreeTemplate<Point, double, 2> grid_to_rtree_template(const Grid &grid) {
 }
 
 TEST_CASE("benchmark template version", "[benchmark]") {
-  auto grid = make_grid(100, dims); // 100x100=>10k points
+  auto grid = make_grid(200, dims); // 100x100=>10k points
   // 1000x1000 (1M) => 7s
   // cout << pp(grid.points) << endl;
 
@@ -202,7 +202,7 @@ TEST_CASE("benchmark template version", "[benchmark]") {
 
 TEST_CASE("benchmark", "[benchmark]") {
   // TODO until 2 it's working. then crash
-  auto grid = make_grid(100, dims); // 100x100=>10k points
+  auto grid = make_grid(200, dims); // 100x100=>10k points
   // cout << pp(grid.points) << endl;
 
   auto t1 = high_resolution_clock::now();
