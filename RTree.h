@@ -200,8 +200,18 @@ protected:
           std::copy(other.m_min, other.m_min + dims, m_min);
           std::copy(other.m_max, other.m_max + dims, m_max);
       // cout << "rect copy ctor"<< endl;
-      
     };
+
+    Rect &operator=(const Rect &other) {
+      // without this when  `a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;`
+      // and modifying a_parVars->m_coverSplit, it was modifying a_parVars->m_branchBuf[0].m_rect
+
+      // so.. the default copy assignment was copying the m_min & m_max pointers?
+      // cout << "Rect copy assignment" << endl;
+      std::copy(other.m_min, other.m_min + dims, m_min);
+      std::copy(other.m_max, other.m_max + dims, m_max);
+      return *this;
+    }
   };
 
   /// May be data or may be another subtree
@@ -340,6 +350,7 @@ protected:
   void DisconnectBranch(Node *a_node, int a_index);
   int PickBranch(const Rect *a_rect, Node *a_node);
   Rect CombineRect(const Rect *a_rectA, const Rect *a_rectB);
+  void combine_rects(const Rect *dst, const Rect *a, const Rect *b);
   void SplitNode(Node *a_node, const Branch *a_branch, Node **a_newNode);
   ELEMTYPEREAL RectSphericalVolume(Rect *a_rect);
   ELEMTYPEREAL RectVolume(Rect *a_rect);
@@ -611,8 +622,11 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
     if (!childWasSplit) {
       // Child was not split. Merge the bounding box of the new record with the
       // existing bounding box
-      a_node->m_branch[index].m_rect =
-          CombineRect(&a_branch.m_rect, &(a_node->m_branch[index].m_rect));
+
+      // WIP perf
+      // a_node->m_branch[index].m_rect =
+      //     CombineRect(&a_branch.m_rect, &(a_node->m_branch[index].m_rect));
+      combine_rects(&(a_node->m_branch[index].m_rect), &a_branch.m_rect, &(a_node->m_branch[index].m_rect));
       return false;
     } else {
       // Child was split. The old branches are now re-partitioned to two nodes
@@ -693,7 +707,9 @@ typename RTREE_QUAL::Rect RTREE_QUAL::NodeCover(Node *a_node) {
   // TODO here a_node->m_branch[0].m_rect has dims 1836216166
   Rect rect = a_node->m_branch[0].m_rect;
   for (int index = 1; index < a_node->m_count; ++index) {
-    rect = CombineRect(&rect, &(a_node->m_branch[index].m_rect));
+    // WIP perf
+    // rect = CombineRect(&rect, &(a_node->m_branch[index].m_rect));
+    combine_rects(&rect, &rect, &(a_node->m_branch[index].m_rect));
   }
 
   return rect;
@@ -757,7 +773,9 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
   for (int index = 0; index < a_node->m_count; ++index) {
     Rect *curRect = &a_node->m_branch[index].m_rect;
     area = CalcRectVolume(curRect);
-    tempRect = CombineRect(a_rect, curRect);
+    // tempRect = CombineRect(a_rect, curRect);
+    // WIP perf
+    combine_rects(&tempRect, a_rect, curRect);
     increase = CalcRectVolume(&tempRect) - area;
     if ((increase < bestIncr) || firstTime) {
       best = index;
@@ -779,6 +797,8 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect *a_rectA,
                                                   const Rect *a_rectB) {
   ASSERT(a_rectA && a_rectB);
 
+  // TODO this function takes 60% (instead of 32% of template version)
+  // cause of the Rect ctor
   Rect newRect(this);
 
   for (unsigned int index = 0; index < dims; ++index) {
@@ -788,6 +808,19 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect *a_rectA,
 
   return newRect;
 }
+
+// Combine two rectangles into larger one containing both
+RTREE_TEMPLATE
+void RTREE_QUAL::combine_rects(const Rect *dst, const Rect *a, const Rect *b) {
+  ASSERT(dst && a && b);
+
+  for (unsigned int index = 0; index < dims; index++) {
+    dst->m_min[index] = Min(a->m_min[index], b->m_min[index]);
+    dst->m_max[index] = Max(a->m_max[index], b->m_max[index]);
+  }
+}
+
+
 
 // Split a node.
 // Divides the nodes branches and the extra one between two nodes.
@@ -891,10 +924,18 @@ void RTREE_QUAL::GetBranches(Node *a_node, const Branch *a_branch,
   a_parVars->m_branchCount = MAXNODES + 1;
 
   // Calculate rect containing all in the set
+  // Note: without implementing Rect copy assignment,
+  // when modifying m_coverSplit, it would also modify m_branchBuf[0].m_rect
   a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
   for (int index = 1; index < MAXNODES + 1; ++index) {
     a_parVars->m_coverSplit = CombineRect(
         &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
+    // WTF here using combine_rects makes a test fail
+    // a_parVars->m_coverSplit = CombineRect(
+    //     &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
+    // WIP perf
+    combine_rects(&a_parVars->m_coverSplit, &a_parVars->m_coverSplit,
+                  &a_parVars->m_branchBuf[index].m_rect);
   }
   a_parVars->m_coverSplitArea = CalcRectVolume(&a_parVars->m_coverSplit);
 }
