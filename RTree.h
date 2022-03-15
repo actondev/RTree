@@ -349,7 +349,6 @@ protected:
   bool AddBranch(const Branch *a_branch, Node *a_node, Node **a_newNode);
   void DisconnectBranch(Node *a_node, int a_index);
   int PickBranch(const Rect *a_rect, Node *a_node);
-  Rect CombineRect(const Rect *a_rectA, const Rect *a_rectB);
   void combine_rects(const Rect *dst, const Rect *a, const Rect *b);
   void SplitNode(Node *a_node, const Branch *a_branch, Node **a_newNode);
   ELEMTYPEREAL RectSphericalVolume(Rect *a_rect);
@@ -622,10 +621,6 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
     if (!childWasSplit) {
       // Child was not split. Merge the bounding box of the new record with the
       // existing bounding box
-
-      // WIP perf
-      // a_node->m_branch[index].m_rect =
-      //     CombineRect(&a_branch.m_rect, &(a_node->m_branch[index].m_rect));
       combine_rects(&(a_node->m_branch[index].m_rect), &a_branch.m_rect, &(a_node->m_branch[index].m_rect));
       return false;
     } else {
@@ -707,8 +702,6 @@ typename RTREE_QUAL::Rect RTREE_QUAL::NodeCover(Node *a_node) {
   // TODO here a_node->m_branch[0].m_rect has dims 1836216166
   Rect rect = a_node->m_branch[0].m_rect;
   for (int index = 1; index < a_node->m_count; ++index) {
-    // WIP perf
-    // rect = CombineRect(&rect, &(a_node->m_branch[index].m_rect));
     combine_rects(&rect, &rect, &(a_node->m_branch[index].m_rect));
   }
 
@@ -773,8 +766,6 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
   for (int index = 0; index < a_node->m_count; ++index) {
     Rect *curRect = &a_node->m_branch[index].m_rect;
     area = CalcRectVolume(curRect);
-    // tempRect = CombineRect(a_rect, curRect);
-    // WIP perf
     combine_rects(&tempRect, a_rect, curRect);
     increase = CalcRectVolume(&tempRect) - area;
     if ((increase < bestIncr) || firstTime) {
@@ -789,24 +780,6 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
     }
   }
   return best;
-}
-
-// Combine two rectangles into larger one containing both
-RTREE_TEMPLATE
-typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect *a_rectA,
-                                                  const Rect *a_rectB) {
-  ASSERT(a_rectA && a_rectB);
-
-  // TODO this function takes 60% (instead of 32% of template version)
-  // cause of the Rect ctor
-  Rect newRect(this);
-
-  for (unsigned int index = 0; index < dims; ++index) {
-    newRect.m_min[index] = Min(a_rectA->m_min[index], a_rectB->m_min[index]);
-    newRect.m_max[index] = Max(a_rectA->m_max[index], a_rectB->m_max[index]);
-  }
-
-  return newRect;
 }
 
 // Combine two rectangles into larger one containing both
@@ -928,12 +901,6 @@ void RTREE_QUAL::GetBranches(Node *a_node, const Branch *a_branch,
   // when modifying m_coverSplit, it would also modify m_branchBuf[0].m_rect
   a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
   for (int index = 1; index < MAXNODES + 1; ++index) {
-    a_parVars->m_coverSplit = CombineRect(
-        &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
-    // WTF here using combine_rects makes a test fail
-    // a_parVars->m_coverSplit = CombineRect(
-    //     &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
-    // WIP perf
     combine_rects(&a_parVars->m_coverSplit, &a_parVars->m_coverSplit,
                   &a_parVars->m_branchBuf[index].m_rect);
   }
@@ -969,8 +936,11 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
     for (int index = 0; index < a_parVars->m_total; ++index) {
       if (PartitionVars::NOT_TAKEN == a_parVars->m_partition[index]) {
         Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
-        Rect rect0 = CombineRect(curRect, &a_parVars->m_cover[0]);
-        Rect rect1 = CombineRect(curRect, &a_parVars->m_cover[1]);
+        Rect rect0(this);
+        Rect rect1(this);
+        combine_rects(&rect0, curRect, &a_parVars->m_cover[0]);
+        combine_rects(&rect1, curRect, &a_parVars->m_cover[1]);
+
         ELEMTYPEREAL growth0 = CalcRectVolume(&rect0) - a_parVars->m_area[0];
         ELEMTYPEREAL growth1 = CalcRectVolume(&rect1) - a_parVars->m_area[1];
         ELEMTYPEREAL diff = growth1 - growth0;
@@ -1064,8 +1034,9 @@ void RTREE_QUAL::PickSeeds(PartitionVars *a_parVars) {
   worst = -a_parVars->m_coverSplitArea - 1;
   for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
     for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
-      Rect oneRect = CombineRect(&a_parVars->m_branchBuf[indexA].m_rect,
-                                 &a_parVars->m_branchBuf[indexB].m_rect);
+      Rect oneRect(this);
+      combine_rects(&oneRect, &a_parVars->m_branchBuf[indexA].m_rect,
+                    &a_parVars->m_branchBuf[indexB].m_rect);
       waste = CalcRectVolume(&oneRect) - area[indexA] - area[indexB];
       if (waste > worst) {
         worst = waste;
@@ -1091,8 +1062,7 @@ void RTREE_QUAL::Classify(int a_index, int a_group, PartitionVars *a_parVars) {
   if (a_parVars->m_count[a_group] == 0) {
     a_parVars->m_cover[a_group] = a_parVars->m_branchBuf[a_index].m_rect;
   } else {
-    a_parVars->m_cover[a_group] = CombineRect(
-        &a_parVars->m_branchBuf[a_index].m_rect, &a_parVars->m_cover[a_group]);
+    combine_rects(&a_parVars->m_cover[a_group], &a_parVars->m_cover[a_group], &a_parVars->m_branchBuf[a_index].m_rect);
   }
 
   // Calculate volume of combined rect
