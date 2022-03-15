@@ -130,3 +130,32 @@ std::vector<std::vector<double>> make_grid(int length, int dims = 2)
   <2022-03-13 Sun> fixes some issues: still though completely oblivious wrt move semantics, copy assignment etc..
 
   also see https://www.geeksforgeeks.org/structure-member-alignment-padding-and-data-packing/
+
+  
+* <2022-03-15 Tue> profiling
+  https://profiler.firefox.com/
+  callgrind (a heap profiler called massif)
+  
+  #+begin_src sh
+# pprof -web ./build/
+sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
+
+perf record -F 99 -g ./build/test/run-tests [benchmark]
+
+perf script -F +pid > perf_ff.perf
+
+perf
+
+sudo apt install linux-tools-5.13.0-30-generic
+
+sudo apt install linux-cloud-tools-generic
+
+  #+end_src
+
+  #+begin_src sh
+valgrind --tool=callgrind ./build/test/run-tests "benchmark template version"
+valgrind --tool=callgrind ./build/test/run-tests "benchmark"
+  #+end_src
+
+  [[file:RTree.h::CombineRect]]
+  

@@ -31,6 +31,30 @@ using std::endl;
 #define Max std::max
 #endif // Max
 
+
+class FixedAllocator {
+ private:
+  size_t size;
+  size_t allocated = 0;
+  void* loc = nullptr;
+ public:
+  FixedAllocator() = delete;
+  FixedAllocator(size_t size) : size(size) {
+    // cout << "allocator ctor, size " << size << endl;
+    loc = malloc(size);
+  }
+  void* allocate(size_t size) {
+    // if((size + allocated) > this->size) {
+    //   printf("Allocator exceeded size. Init size %zu allocated %zu requested %zu\n", this->size, allocated, size);
+    // }
+    void* res = loc + allocated;
+    allocated += size;
+    // printf("allocated %zu, totally %zu out of %zu\n", size, allocated, this->size);
+    // cout << "allocating " << size << endl;
+    return res;
+    }
+};
+
 //
 // RTree.h
 //
@@ -156,12 +180,18 @@ protected:
     {
       // cout << "rect ctor " <<tree->Dimensions() << endl;
     }
-    Rect(int dims)
+    Rect(int dims, FixedAllocator* allocator = nullptr)
         :dims(dims)
     {
       // cout << "rect ctor dims " << dims << endl;
-      m_min = new double[dims];
-      m_max = new double[dims];
+      if(allocator) {
+        // cout << "rect ctor with allocator" << endl;
+        m_min = (double*) allocator->allocate(dims * sizeof(double));
+        m_max = (double*) allocator->allocate(dims * sizeof(double));
+      } else {
+        m_min = new double[dims];
+        m_max = new double[dims];
+      }
       std::fill(m_min, m_min + dims, 0);
       std::fill(m_max, m_max + dims, 0);
     }
@@ -188,8 +218,8 @@ protected:
     Branch(const RTREE_QUAL* tree)
         : Branch(tree->Dimensions()) {
     }
-    Branch(int dims)
-        : m_rect(dims)  {
+    Branch(int dims, FixedAllocator* allocator = nullptr)
+        : m_rect(dims, allocator)  {
       m_dims = dims;
       // cout << "Branch dims ctor" << endl;
           };
@@ -235,20 +265,25 @@ protected:
     Branch* m_branch; // we need MAXNODES branches
     Node() = delete;
     int dims;
+    FixedAllocator allocator;
     Node(const RTREE_QUAL *tree)
         : Node(tree->Dimensions()) { };
-    Node(int dims) :dims(dims) {
+    Node(int dims)
+        : dims(dims),
+          allocator(MAXNODES * (sizeof(Branch) + 2 * dims * sizeof(double)))
+    {
       // TODO a branch can have it's allocator
       // TODO also maxnodes can be ctor argugment. only DATATYPE *needs* to be a template argument
-      m_branch = (Branch*)malloc(MAXNODES * sizeof(Branch));
-      // m_branch = new Branch[MAXNODES]{tree->Dimensions()};
+      
+      // m_branch = (Branch*)malloc(MAXNODES * sizeof(Branch));
+      m_branch = (Branch*)allocator.allocate(MAXNODES * sizeof(Branch));
       for(int i=0; i<MAXNODES; i++) {
         // hmm move semantics could be used instead of placement new
         // but had problems with move & copy assignment definitions
         // Branch b{dims};
         // m_branch[i] = std::move(b);
         // new((void*)(m_branch+i)) Branch(dims);
-        new(m_branch+i) Branch(dims);
+        new(m_branch+i) Branch(dims, &allocator);
       }
       // cout << "Node ctor done" <<endl;
     }
