@@ -158,5 +158,17 @@ valgrind --tool=callgrind ./build/test/run-tests "benchmark template version"
 valgrind --tool=callgrind ./build/test/run-tests "benchmark"
   #+end_src
 
-  [[file:RTree.h::CombineRect]]
-  
+* <2022-03-16 Wed> overloading new etc
+  - https://stackoverflow.com/questions/4638429/c-placement-new-vs-overloading-new
+  - https://stackoverflow.com/questions/58225405/c-14-overload-new-operator-to-allocate-more-continuous-space-than-objects-s
+    static_cast??
+    https://stackoverflow.com/questions/332030/when-should-static-cast-dynamic-cast-const-cast-and-reinterpret-cast-be-used
+
+    https://stackoverflow.com/questions/12215029/c-placement-new-collides-with-own-new-overload?rq=1
+
+    https://bytes.com/topic/c/answers/583571-overriding-placement-new-correctly
+    nice answers (quoting some c++ books)
+
+    https://www.amazon.de/Modern-Generic-Programming-Patterns-Applied/dp/0201704315
+    has a chapter for allocations
+    as seen https://eli.thegreenplace.net/2011/02/17/the-many-faces-of-operator-new-in-c

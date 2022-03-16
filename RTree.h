@@ -192,8 +192,9 @@ protected:
         m_min = new double[dims];
         m_max = new double[dims];
       }
-      std::fill(m_min, m_min + dims, 0);
-      std::fill(m_max, m_max + dims, 0);
+      // hmm.. apparently initializing them is not necessary!
+      // std::fill(m_min, m_min + dims, 0);
+      // std::fill(m_max, m_max + dims, 0);
     }
     Rect(const Rect& other)
         : Rect(other.dims){
@@ -282,10 +283,6 @@ protected:
         : dims(dims),
           allocator(MAXNODES * (sizeof(Branch) + 2 * dims * sizeof(double)))
     {
-      // TODO a branch can have it's allocator
-      // TODO also maxnodes can be ctor argugment. only DATATYPE *needs* to be a template argument
-      
-      // m_branch = (Branch*)malloc(MAXNODES * sizeof(Branch));
       m_branch = (Branch*)allocator.allocate(MAXNODES * sizeof(Branch));
       for(int i=0; i<MAXNODES; i++) {
         // hmm move semantics could be used instead of placement new
@@ -321,7 +318,8 @@ protected:
     int m_count[2];
     Rect m_cover[2];
     ELEMTYPEREAL m_area[2];
-    std::vector<Branch> m_branchBuf;
+    Branch* m_branchBuf;
+    FixedAllocator allocator;
     int m_branchCount;
     Rect m_coverSplit;
     ELEMTYPEREAL m_coverSplitArea;
@@ -329,13 +327,14 @@ protected:
     PartitionVars(const RTREE_QUAL* tree)
         : m_cover{{tree}, {tree}},
           m_coverSplit{tree},
-          // TODO m_branchBuf with allocator?
-          m_branchBuf(MAXNODES +1, Branch{tree})
+          allocator((MAXNODES+1) * (sizeof(Branch) + 2 * tree->Dimensions() * sizeof(double)))
     {
-      // cout << "PartitionVars ctor" << endl;
+      m_branchBuf = (Branch *)allocator.allocate((MAXNODES+1) * sizeof(Branch));
+      for (int i = 0; i < MAXNODES+1; i++) {
+        new (m_branchBuf + i) Branch(tree->Dimensions(), &allocator);
+      }
     };
     ~PartitionVars() {
-      // cout << "PartitionVars dtor" << endl;
     }
   };
 
@@ -805,6 +804,7 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
 
   // Could just use local here, but member or external is faster since it is
   // reused
+  // TODO unique_ptr & overload new operator: accomodating self & branches
   PartitionVars localVars(this);
   PartitionVars *parVars = &localVars;
 
@@ -1031,9 +1031,9 @@ void RTREE_QUAL::PickSeeds(PartitionVars *a_parVars) {
   }
 
   worst = -a_parVars->m_coverSplitArea - 1;
+  Rect oneRect(this);
   for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
     for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
-      Rect oneRect(this);
       combine_rects(&oneRect, &a_parVars->m_branchBuf[indexA].m_rect,
                     &a_parVars->m_branchBuf[indexB].m_rect);
       waste = CalcRectVolume(&oneRect) - area[indexA] - area[indexB];
