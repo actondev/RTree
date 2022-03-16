@@ -203,6 +203,7 @@ protected:
         m_min = (double*) allocator->allocate(dims * sizeof(double));
         m_max = (double*) allocator->allocate(dims * sizeof(double));
       } else {
+        // cout << "rect ctor without allocator" << endl;
         m_min = new double[dims];
         m_max = new double[dims];
       }
@@ -460,7 +461,10 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  Branch branch(this);
+  // TODO this causes many branch & rect initializations
+  // just static should be ok, right?
+  static FixedAllocator allocator(Branch::heap_size(dims));
+  static Branch branch(dims, &allocator);
   branch.m_data = a_dataId;
   branch.m_child = NULL;
 
@@ -701,7 +705,8 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
     Node *newRoot = AllocNode();
     newRoot->m_level = (*a_root)->m_level + 1;
 
-    Branch branch(this);
+    static FixedAllocator allocator(Branch::heap_size(dims));
+    static Branch branch(dims, &allocator);
 
     // add old root node as a child of the new root
     branch.m_rect = NodeCover(*a_root);
@@ -788,7 +793,9 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
   ELEMTYPEREAL area;
   ELEMTYPEREAL bestArea;
   int best = 0;
-  Rect tempRect(this);
+
+  static FixedAllocator allocator(Rect::heap_size(dims));
+  static Rect tempRect(dims, &allocator);
 
   for (int index = 0; index < a_node->m_count; ++index) {
     Rect *curRect = &a_node->m_branch[index].m_rect;
@@ -880,7 +887,7 @@ ELEMTYPEREAL RTREE_QUAL::RectSphericalVolume(Rect *a_rect) {
   ELEMTYPEREAL radius;
 
   for (unsigned int index = 0; index < dims; ++index) {
-    ELEMTYPEREAL halfExtent = ((ELEMTYPEREAL)a_rect->m_max[index] -
+    const ELEMTYPEREAL halfExtent = ((ELEMTYPEREAL)a_rect->m_max[index] -
                                (ELEMTYPEREAL)a_rect->m_min[index]) *
                               (ELEMTYPEREAL)0.5;
     sumOfSquares += halfExtent * halfExtent;
@@ -956,8 +963,9 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
   InitParVars(a_parVars, a_parVars->m_branchCount, a_minFill);
   PickSeeds(a_parVars);
 
-  Rect rect0(this);
-  Rect rect1(this);
+  static FixedAllocator allocator(2 * Rect::heap_size(dims));
+  static Rect rect0(dims, &allocator);
+  static Rect rect1(dims, &allocator);
 
   while (
       ((a_parVars->m_count[0] + a_parVars->m_count[1]) < a_parVars->m_total) &&
@@ -1061,7 +1069,9 @@ void RTREE_QUAL::PickSeeds(PartitionVars *a_parVars) {
   }
 
   worst = -a_parVars->m_coverSplitArea - 1;
-  Rect oneRect(this);
+  static FixedAllocator allocator(Rect::heap_size(dims));
+  static Rect oneRect(dims, &allocator);
+
   for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
     for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
       combine_rects(&oneRect, &a_parVars->m_branchBuf[indexA].m_rect,
