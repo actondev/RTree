@@ -191,6 +191,9 @@ protected:
     {
       // cout << "rect ctor " <<tree->Dimensions() << endl;
     }
+    static size_t heap_size(int dims) {
+      return  2 * dims * sizeof(double);
+    }
     Rect(int dims, FixedAllocator* allocator = nullptr)
         :dims(dims)
     {
@@ -245,6 +248,9 @@ protected:
       m_dims = dims;
       // cout << "Branch dims ctor" << endl;
           };
+    static size_t heap_size(int dims) {
+      return Rect::heap_size(dims);
+    }
     Branch(const Branch &other)
         : Branch(other.m_dims){
       // cout << "Branch copy ctor" << endl;
@@ -327,23 +333,36 @@ protected:
     int m_total;
     int m_minFill;
     int m_count[2];
+
+    // important to haves this before the rects
+    // or generally anything that wants to use this
+    // cause of the Constructor initialization-list evaluation order
+    // https://stackoverflow.com/questions/1242830/constructor-initialization-list-evaluation-order
+    FixedAllocator allocator;
+
     Rect m_cover[2];
     ELEMTYPEREAL m_area[2];
     Branch* m_branchBuf;
-    FixedAllocator allocator;
     int m_branchCount;
     Rect m_coverSplit;
     ELEMTYPEREAL m_coverSplitArea;
     PartitionVars() = delete;
-    PartitionVars(const RTREE_QUAL* tree)
-        : m_cover{{tree}, {tree}},
-          m_coverSplit{tree},
-          allocator((MAXNODES+1) * (sizeof(Branch) + 2 * tree->Dimensions() * sizeof(double)))
+    PartitionVars(const RTREE_QUAL* tree) : PartitionVars(tree->Dimensions()) {}
+    PartitionVars(int dims)
+        : allocator((MAXNODES+1) * (sizeof(Branch) + Branch::heap_size(dims))
+                     // plus the m_coverSplit
+                    + 1 * Rect::heap_size(dims)
+                    // plus m_cover (Rect[2])
+                    + 2 * Rect::heap_size(dims)
+                    ),
+          m_coverSplit{dims, &allocator },
+          m_cover{{dims, &allocator}, {dims, &allocator }}
     {
       m_branchBuf = (Branch *)allocator.allocate((MAXNODES+1) * sizeof(Branch));
       for (int i = 0; i < MAXNODES+1; i++) {
-        new (m_branchBuf + i) Branch(tree->Dimensions(), &allocator);
+        new (m_branchBuf + i) Branch(dims, &allocator);
       }
+      // allocator.print_stats();
     };
     ~PartitionVars() {
     }
