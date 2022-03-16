@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <optional>
 #include <vector>
 #include <cstddef>
@@ -36,22 +37,32 @@ class FixedAllocator {
  private:
   size_t size;
   size_t allocated = 0;
-  void* loc = nullptr;
+  uint8_t* block = nullptr;
  public:
   FixedAllocator() = delete;
   FixedAllocator(size_t size) : size(size) {
     // cout << "allocator ctor, size " << size << endl;
-    loc = malloc(size);
+    block = new uint8_t[size];
+    if(!block) {
+      cout << "could not allocate" << endl;
+    }
+  }
+  void print_stats() {
+    printf("Allocator stats: Init size %zu, allocated %zu\n",
+           this->size, allocated);
   }
   void* allocate(size_t size) {
-    // if((size + allocated) > this->size) {
-    //   printf("Allocator exceeded size. Init size %zu allocated %zu requested %zu\n", this->size, allocated, size);
-    // }
-    void* res = loc + allocated;
+    uint8_t* res = block + allocated;
     allocated += size;
+    if (allocated > this->size) {
+      printf("Allocator exceeded size. Init size %zu allocated %zu requested "
+             "%zu\n",
+             this->size, allocated, size);
+    }
+
     // printf("allocated %zu, totally %zu out of %zu\n", size, allocated, this->size);
     // cout << "allocating " << size << endl;
-    return res;
+    return (void*)res;
     }
 };
 
