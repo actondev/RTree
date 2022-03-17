@@ -376,7 +376,7 @@ protected:
   bool InsertRectRec(const Branch &a_branch, Node *a_node, Node **a_newNode,
                      int a_level);
   bool InsertRect(const Branch &a_branch, Node **a_root, int a_level);
-  Rect NodeCover(Node *a_node);
+  void node_cover(Rect* dst, Node *a_node);
   bool AddBranch(const Branch *a_branch, Node *a_node, Node **a_newNode);
   void DisconnectBranch(Node *a_node, int a_index);
   int PickBranch(const Rect *a_rect, Node *a_node);
@@ -659,11 +659,10 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
     } else {
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
-      a_node->m_branch[index].m_rect =
-          NodeCover(a_node->m_branch[index].m_child);
+      node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
       Branch branch(this);
       branch.m_child = otherNode;
-      branch.m_rect = NodeCover(otherNode);
+      node_cover(&branch.m_rect, otherNode);
 
       // The old node is already a child of a_node. Now add the newly-created
       // node to a_node as well. a_node might be split because of that.
@@ -709,12 +708,12 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
     static Branch branch(dims, &allocator);
 
     // add old root node as a child of the new root
-    branch.m_rect = NodeCover(*a_root);
+    node_cover(&branch.m_rect, *a_root);
     branch.m_child = *a_root;
     AddBranch(&branch, newRoot, NULL);
 
     // add the split node as a child of the new root
-    branch.m_rect = NodeCover(newNode);
+    node_cover(&branch.m_rect, newNode);
     branch.m_child = newNode;
     AddBranch(&branch, newRoot, NULL);
 
@@ -730,14 +729,12 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
 // Find the smallest rectangle that includes all rectangles in branches of a
 // node.
 RTREE_TEMPLATE
-typename RTREE_QUAL::Rect RTREE_QUAL::NodeCover(Node *a_node) {
+void RTREE_QUAL::node_cover(Rect* dst, Node *a_node) {
   ASSERT(a_node);
-  Rect rect = a_node->m_branch[0].m_rect;
+  *dst = a_node->m_branch[0].m_rect;
   for (int index = 1; index < a_node->m_count; ++index) {
-    combine_rects(&rect, &rect, &(a_node->m_branch[index].m_rect));
+    combine_rects(dst, dst, &(a_node->m_branch[index].m_rect));
   }
-
-  return rect;
 }
 
 // Add a branch to a node.  Split the node if necessary.
@@ -1172,8 +1169,7 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
                            a_listNode)) {
           if (a_node->m_branch[index].m_child->m_count >= MINNODES) {
             // child removed, just resize parent rect
-            a_node->m_branch[index].m_rect =
-                NodeCover(a_node->m_branch[index].m_child);
+            node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
           } else {
             // child removed, not enough entries in node, eliminate node
             ReInsert(a_node->m_branch[index].m_child, a_listNode);
