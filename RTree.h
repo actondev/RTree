@@ -47,6 +47,9 @@ class FixedAllocator {
       cout << "could not allocate" << endl;
     }
   }
+  ~FixedAllocator() {
+    delete[] block;
+  }
   void print_stats() {
     printf("Allocator stats: Init size %zu, allocated %zu\n",
            this->size, allocated);
@@ -186,6 +189,7 @@ protected:
     double* m_max; ///< Max dimensions of bounding box
     Rect() = delete;
     const int dims;
+    bool needs_cleanup = false;
     Rect(const RTREE_QUAL* tree)
         : Rect(tree->Dimensions())
     {
@@ -203,13 +207,17 @@ protected:
         m_min = (double*) allocator->allocate(dims * sizeof(double));
         m_max = (double*) allocator->allocate(dims * sizeof(double));
       } else {
-        // cout << "rect ctor without allocator" << endl;
         m_min = new double[dims];
         m_max = new double[dims];
+        needs_cleanup = true;
+        // cout << "rect ctor without allocator" << endl;
       }
       // hmm.. apparently initializing them is not necessary!
-      // std::fill(m_min, m_min + dims, 0);
-      // std::fill(m_max, m_max + dims, 0);
+
+    }
+    void init(double value) {
+      std::fill(m_min, m_min + dims, value);
+      std::fill(m_max, m_max + dims, value);
     }
     Rect(const Rect& other)
         : Rect(other.dims){
@@ -227,6 +235,12 @@ protected:
       std::copy(other.m_min, other.m_min + dims, m_min);
       std::copy(other.m_max, other.m_max + dims, m_max);
       return *this;
+    }
+    ~Rect() {
+      if(needs_delete) {
+        delete[] m_min;
+        delete[] m_max;
+      }
     }
   };
 
@@ -299,7 +313,7 @@ protected:
         : Node(tree->Dimensions()) { };
     Node(int dims)
         : dims(dims),
-          allocator(MAXNODES * (sizeof(Branch) + 2 * dims * sizeof(double)))
+          allocator(MAXNODES * (sizeof(Branch) + Branch::heap_size(dims)))
     {
       m_branch = (Branch*)allocator.allocate(MAXNODES * sizeof(Branch));
       for(int i=0; i<MAXNODES; i++) {
@@ -317,6 +331,9 @@ protected:
     };
     ~Node() {
       // delete m_branch;
+      for (int i = 0; i < MAXNODES; i++) {
+        m_branch[i].~Branch();
+      }
     }
   };
 
@@ -485,8 +502,8 @@ int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
     ASSERT(a_min[index] <= a_max[index]);
   }
 #endif //_DEBUG
-
-  Rect rect(this);
+  static FixedAllocator allocator(Rect::heap_size(dims));
+  static Rect rect(dims, &allocator);
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
@@ -508,7 +525,8 @@ int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  Rect rect(this);
+  static FixedAllocator allocator(Rect::heap_size(dims));
+  static Rect rect(dims, &allocator);
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
     rect.m_min[axis] = a_min[axis];
@@ -660,7 +678,9 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
       node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
-      static Branch branch(this);
+      static FixedAllocator allocator(Branch::heap_size(dims));
+      static Branch branch(dims, &allocator);
+
       branch.m_child = otherNode;
       node_cover(&branch.m_rect, otherNode);
 
@@ -1299,12 +1319,15 @@ RTREE_TEMPLATE
 typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
+
+  static FixedAllocator allocator(Rect::heap_size(dims));
+  static Rect bounds(dims, &allocator);
+
   if(m_root->m_count == 0) {
-    Rect bounds(this);
+    bounds.init(0);
     return bounds;
   }
 
-  Rect bounds(this);
   Branch &first_branch = m_root->m_branch[0];
   bounds = first_branch.m_rect; // init
   for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {

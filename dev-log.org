@@ -156,6 +156,8 @@ sudo apt install linux-cloud-tools-generic
 rm -rf callgrind.out.*
 valgrind --tool=callgrind ./build/test/run-tests "benchmark template version"
 valgrind --tool=callgrind ./build/test/run-tests "benchmark"
+
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  ./build/test/run-tests "rtree basic ops"
   #+end_src
 
 * <2022-03-16 Wed> overloading new etc
