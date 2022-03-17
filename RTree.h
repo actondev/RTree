@@ -237,7 +237,7 @@ protected:
       return *this;
     }
     ~Rect() {
-      if(needs_delete) {
+      if(needs_cleanup) {
         delete[] m_min;
         delete[] m_max;
       }
