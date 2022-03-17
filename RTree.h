@@ -122,12 +122,22 @@ protected:
   uint32_t dims; // set by the constructor
   struct Node;   // Fwd decl.  Used by other internal structs and iterator
   struct Branch;
+  struct Rect;
+  struct PartitionVars;
   uint32_t count = 0;
 
  private:
   Branch m_insert_branch;
   Branch m_insert_rect_rec_branch;
   Branch m_insert_rect_branch;
+  Rect m_bounds_rect;
+  Rect m_remove_rect;
+  Rect m_search_rect;
+  Rect m_pick_branch_rect;
+  Rect m_pick_seeds_rect;
+  Rect m_choose_partition_rect0;
+  Rect m_choose_partition_rect1;
+  PartitionVars m_split_parition_vars;
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
@@ -166,7 +176,7 @@ public:
   /// function to return result. Callback should return 'true' to continue
   /// searching \return Returns the number of entries found
   int Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-             Callback callback) const;
+             Callback callback);
 
   /// Remove all entries from tree
   void RemoveAll();
@@ -426,7 +436,7 @@ protected:
   bool Overlap(Rect *a_rectA, Rect *a_rectB) const;
   void ReInsert(Node *a_node, ListNode **a_listNode);
   bool Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-              Callback callback) const;
+              Callback callback);
   void RemoveAllRec(Node *a_node);
   void Reset();
   void MoveChildren(Node* a_node, const ELEMTYPE *a_offset);
@@ -441,7 +451,7 @@ public:
   // return all the AABBs that form the RTree
   std::vector<Rect> ListTree() const;
 
-  Rect Bounds() const;
+  Rect Bounds();
   int Dimensions() const;
 };
 
@@ -450,7 +460,15 @@ RTREE_TEMPLATE
 RTREE_QUAL::RTree(int dims)
     : m_insert_branch(dims),
       m_insert_rect_rec_branch(dims),
-      m_insert_rect_branch(dims)
+      m_insert_rect_branch(dims),
+      m_bounds_rect(dims),
+      m_remove_rect(dims),
+      m_search_rect(dims),
+      m_pick_branch_rect(dims),
+      m_pick_seeds_rect(dims),
+      m_choose_partition_rect0(dims),
+      m_choose_partition_rect1(dims),
+      m_split_parition_vars(dims)
 {
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
@@ -511,42 +529,37 @@ int RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
     ASSERT(a_min[index] <= a_max[index]);
   }
 #endif //_DEBUG
-  static FixedAllocator allocator(Rect::heap_size(dims));
-  static Rect rect(dims, &allocator);
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
-    rect.m_min[axis] = a_min[axis];
-    rect.m_max[axis] = a_max[axis];
+    m_remove_rect.m_min[axis] = a_min[axis];
+    m_remove_rect.m_max[axis] = a_max[axis];
   }
 
   int removedCount = 0;
-  RemoveRect(&m_root, &rect, removedCount, predicate);
+  RemoveRect(&m_root, &m_remove_rect, removedCount, predicate);
   count -= removedCount;
   return removedCount;
 }
 
 RTREE_TEMPLATE
 int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-                       Callback callback) const {
+                       Callback callback) {
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
     ASSERT(a_min[index] <= a_max[index]);
   }
 #endif //_DEBUG
 
-  static FixedAllocator allocator(Rect::heap_size(dims));
-  static Rect rect(dims, &allocator);
-
   for (unsigned int axis = 0; axis < dims; ++axis) {
-    rect.m_min[axis] = a_min[axis];
-    rect.m_max[axis] = a_max[axis];
+    m_search_rect.m_min[axis] = a_min[axis];
+    m_search_rect.m_max[axis] = a_max[axis];
   }
 
   // NOTE: May want to return search result another way, perhaps returning the
   // number of found elements here.
 
   int foundCount = 0;
-  Search(m_root, &rect, foundCount, callback);
+  Search(m_root, &m_search_rect, foundCount, callback);
 
   return foundCount;
 }
@@ -815,14 +828,11 @@ int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
   ELEMTYPEREAL bestArea;
   int best = 0;
 
-  static FixedAllocator allocator(Rect::heap_size(dims));
-  static Rect tempRect(dims, &allocator);
-
   for (int index = 0; index < a_node->m_count; ++index) {
     Rect *curRect = &a_node->m_branch[index].m_rect;
     area = CalcRectVolume(curRect);
-    combine_rects(&tempRect, a_rect, curRect);
-    increase = CalcRectVolume(&tempRect) - area;
+    combine_rects(&m_pick_branch_rect, a_rect, curRect);
+    increase = CalcRectVolume(&m_pick_branch_rect) - area;
     if ((increase < bestIncr) || firstTime) {
       best = index;
       bestArea = area;
@@ -860,17 +870,11 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
   ASSERT(a_node);
   ASSERT(a_branch);
 
-  // Could just use local here, but member or external is faster since it is
-  // reused
-  // TODO unique_ptr & overload new operator: accomodating self & branches
-  static PartitionVars localVars(this);
-  PartitionVars *parVars = &localVars;
-
   // Load all the branches into a buffer, initialize old node
-  GetBranches(a_node, a_branch, parVars);
+  GetBranches(a_node, a_branch, &m_split_parition_vars);
 
   // Find partition
-  ChoosePartition(parVars, MINNODES);
+  ChoosePartition(&m_split_parition_vars, MINNODES);
 
   // Create a new node to hold (about) half of the branches
   *a_newNode = AllocNode();
@@ -878,9 +882,9 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
 
   // Put branches from buffer into 2 nodes according to the chosen partition
   a_node->m_count = 0;
-  LoadNodes(a_node, *a_newNode, parVars);
+  LoadNodes(a_node, *a_newNode, &m_split_parition_vars);
 
-  ASSERT((a_node->m_count + (*a_newNode)->m_count) == parVars->m_total);
+  ASSERT((a_node->m_count + (*a_newNode)->m_count) == m_split_parition_vars.m_total);
 }
 
 // Calculate the n-dimensional volume of a rectangle
@@ -984,10 +988,6 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
   InitParVars(a_parVars, a_parVars->m_branchCount, a_minFill);
   PickSeeds(a_parVars);
 
-  static FixedAllocator allocator(2 * Rect::heap_size(dims));
-  static Rect rect0(dims, &allocator);
-  static Rect rect1(dims, &allocator);
-
   while (
       ((a_parVars->m_count[0] + a_parVars->m_count[1]) < a_parVars->m_total) &&
       (a_parVars->m_count[0] < (a_parVars->m_total - a_parVars->m_minFill)) &&
@@ -996,11 +996,11 @@ void RTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
     for (int index = 0; index < a_parVars->m_total; ++index) {
       if (PartitionVars::NOT_TAKEN == a_parVars->m_partition[index]) {
         Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
-        combine_rects(&rect0, curRect, &a_parVars->m_cover[0]);
-        combine_rects(&rect1, curRect, &a_parVars->m_cover[1]);
+        combine_rects(&m_choose_partition_rect0, curRect, &a_parVars->m_cover[0]);
+        combine_rects(&m_choose_partition_rect1, curRect, &a_parVars->m_cover[1]);
 
-        ELEMTYPEREAL growth0 = CalcRectVolume(&rect0) - a_parVars->m_area[0];
-        ELEMTYPEREAL growth1 = CalcRectVolume(&rect1) - a_parVars->m_area[1];
+        ELEMTYPEREAL growth0 = CalcRectVolume(&m_choose_partition_rect0) - a_parVars->m_area[0];
+        ELEMTYPEREAL growth1 = CalcRectVolume(&m_choose_partition_rect1) - a_parVars->m_area[1];
         ELEMTYPEREAL diff = growth1 - growth0;
         if (diff >= 0) {
           group = 0;
@@ -1090,14 +1090,12 @@ void RTREE_QUAL::PickSeeds(PartitionVars *a_parVars) {
   }
 
   worst = -a_parVars->m_coverSplitArea - 1;
-  static FixedAllocator allocator(Rect::heap_size(dims));
-  static Rect oneRect(dims, &allocator);
 
   for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
     for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
-      combine_rects(&oneRect, &a_parVars->m_branchBuf[indexA].m_rect,
+      combine_rects(&m_pick_seeds_rect, &a_parVars->m_branchBuf[indexA].m_rect,
                     &a_parVars->m_branchBuf[indexB].m_rect);
-      waste = CalcRectVolume(&oneRect) - area[indexA] - area[indexB];
+      waste = CalcRectVolume(&m_pick_seeds_rect) - area[indexA] - area[indexB];
       if (waste > worst) {
         worst = waste;
         seed0 = indexA;
@@ -1255,7 +1253,7 @@ void RTREE_QUAL::ReInsert(Node *a_node, ListNode **a_listNode) {
 // argument rectangle.
 RTREE_TEMPLATE
 bool RTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-                        Callback callback) const {
+                        Callback callback)  {
   ASSERT(a_node);
   ASSERT(a_node->m_level >= 0);
   ASSERT(a_rect);
@@ -1319,31 +1317,29 @@ std::vector<typename RTREE_QUAL::Rect> RTREE_QUAL::ListTree() const {
   return treeList;
 }
 
+// this could be const but I'm modifying a member variable (for avoiding allocations)
 RTREE_TEMPLATE
-typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() const {
+typename RTREE_QUAL::Rect RTREE_QUAL::Bounds() {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
 
-  static FixedAllocator allocator(Rect::heap_size(dims));
-  static Rect bounds(dims, &allocator);
-
   if(m_root->m_count == 0) {
-    bounds.init(0);
-    return bounds;
+    m_bounds_rect.init(0);
+    return m_bounds_rect;
   }
 
   Branch &first_branch = m_root->m_branch[0];
-  bounds = first_branch.m_rect; // init
+  m_bounds_rect = first_branch.m_rect; // init
   for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {
     Branch &branch = m_root->m_branch[branch_id];
     Rect &other_rect = branch.m_rect;
     for (unsigned int index = 0; index < dims; index++) {
-      bounds.m_min[index] = Min(bounds.m_min[index], other_rect.m_min[index]);
-      bounds.m_max[index] = Max(bounds.m_max[index], other_rect.m_max[index]);
+      m_bounds_rect.m_min[index] = Min(m_bounds_rect.m_min[index], other_rect.m_min[index]);
+      m_bounds_rect.m_max[index] = Max(m_bounds_rect.m_max[index], other_rect.m_max[index]);
     }
   }
 
-  return bounds;
+  return m_bounds_rect;
 }
 
 RTREE_TEMPLATE
