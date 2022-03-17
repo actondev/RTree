@@ -127,6 +127,7 @@ protected:
  private:
   Branch m_insert_branch;
   Branch m_insert_rect_rec_branch;
+  Branch m_insert_rect_branch;
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
@@ -448,7 +449,8 @@ public:
 RTREE_TEMPLATE
 RTREE_QUAL::RTree(int dims)
     : m_insert_branch(dims),
-      m_insert_rect_rec_branch(dims)
+      m_insert_rect_rec_branch(dims),
+      m_insert_rect_branch(dims)
 {
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
@@ -729,18 +731,15 @@ bool RTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
     Node *newRoot = AllocNode();
     newRoot->m_level = (*a_root)->m_level + 1;
 
-    static FixedAllocator allocator(Branch::heap_size(dims));
-    static Branch branch(dims, &allocator);
-
     // add old root node as a child of the new root
-    node_cover(&branch.m_rect, *a_root);
-    branch.m_child = *a_root;
-    AddBranch(&branch, newRoot, NULL);
+    node_cover(&m_insert_rect_branch.m_rect, *a_root);
+    m_insert_rect_branch.m_child = *a_root;
+    AddBranch(&m_insert_rect_branch, newRoot, NULL);
 
     // add the split node as a child of the new root
-    node_cover(&branch.m_rect, newNode);
-    branch.m_child = newNode;
-    AddBranch(&branch, newRoot, NULL);
+    node_cover(&m_insert_rect_branch.m_rect, newNode);
+    m_insert_rect_branch.m_child = newNode;
+    AddBranch(&m_insert_rect_branch, newRoot, NULL);
 
     // set the new root as the root node
     *a_root = newRoot;
