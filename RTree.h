@@ -252,7 +252,7 @@ protected:
     Node *m_child;   ///< Child node
     // Note: made it optional initially cause of other issues,
     // but I suppose it's useful: what if the stored datatype does not have a default constructor?
-    std::optional<DATATYPE> m_data; ///< Data Id
+    DATATYPE m_data; ///< Data Id
     int m_dims;
     Branch() = delete;
     Branch(const RTREE_QUAL* tree)
@@ -1208,7 +1208,7 @@ bool RTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, 
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch& branch = a_node->m_branch[index];
-        if (predicate(branch.m_data.value(), branch.m_rect.m_min, branch.m_rect.m_max)) {
+        if (predicate(branch.m_data, branch.m_rect.m_min, branch.m_rect.m_max)) {
           removed = true;
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
@@ -1272,7 +1272,7 @@ bool RTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch& branch = a_node->m_branch[index];
-        DATATYPE &data = branch.m_data.value();
+        DATATYPE &data = branch.m_data;
         ++a_foundCount;
 
         if (!callback(data, branch.m_rect.m_min, branch.m_rect.m_max)) {
