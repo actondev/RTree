@@ -126,6 +126,7 @@ protected:
 
  private:
   Branch m_insert_branch;
+  Branch m_insert_rect_rec_branch;
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
@@ -445,8 +446,9 @@ public:
 
 
 RTREE_TEMPLATE
-RTREE_QUAL::RTree(int dims):
-    m_insert_branch(dims)
+RTREE_QUAL::RTree(int dims)
+    : m_insert_branch(dims),
+      m_insert_rect_rec_branch(dims)
 {
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
@@ -683,15 +685,13 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
       node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
-      static FixedAllocator allocator(Branch::heap_size(dims));
-      static Branch branch(dims, &allocator);
 
-      branch.m_child = otherNode;
-      node_cover(&branch.m_rect, otherNode);
+      m_insert_rect_rec_branch.m_child = otherNode;
+      node_cover(&m_insert_rect_rec_branch.m_rect, otherNode);
 
       // The old node is already a child of a_node. Now add the newly-created
       // node to a_node as well. a_node might be split because of that.
-      return AddBranch(&branch, a_node, a_newNode);
+      return AddBranch(&m_insert_rect_rec_branch, a_node, a_newNode);
     }
   } else if (a_node->m_level == a_level) {
     // We have reached level for insertion. Add rect, split if necessary
