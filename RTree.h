@@ -121,7 +121,11 @@ class RTree {
 protected:
   uint32_t dims; // set by the constructor
   struct Node;   // Fwd decl.  Used by other internal structs and iterator
+  struct Branch;
   uint32_t count = 0;
+
+ private:
+  Branch m_insert_branch;
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
@@ -441,7 +445,9 @@ public:
 
 
 RTREE_TEMPLATE
-RTREE_QUAL::RTree(int dims) {
+RTREE_QUAL::RTree(int dims):
+    m_insert_branch(dims)
+{
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
   this->dims = dims;
@@ -481,19 +487,15 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  // TODO this causes many branch & rect initializations
-  // just static should be ok, right?
-  static FixedAllocator allocator(Branch::heap_size(dims));
-  static Branch branch(dims, &allocator);
-  branch.m_data = a_dataId;
-  branch.m_child = NULL;
+  m_insert_branch.m_data = a_dataId;
+  m_insert_branch.m_child = NULL;
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
-    branch.m_rect.m_min[axis] = a_min[axis];
-    branch.m_rect.m_max[axis] = a_max[axis];
+    m_insert_branch.m_rect.m_min[axis] = a_min[axis];
+    m_insert_branch.m_rect.m_max[axis] = a_max[axis];
   }
 
-  InsertRect(branch, &m_root, 0);
+  InsertRect(m_insert_branch, &m_root, 0);
   count++;
 }
 
