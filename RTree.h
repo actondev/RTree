@@ -185,7 +185,7 @@ protected:
     double* m_min; ///< Min dimensions of bounding box
     double* m_max; ///< Max dimensions of bounding box
     Rect() = delete;
-    int dims;
+    const int dims;
     Rect(const RTREE_QUAL* tree)
         : Rect(tree->Dimensions())
     {
@@ -660,7 +660,7 @@ bool RTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
       node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
-      Branch branch(this);
+      static Branch branch(this);
       branch.m_child = otherNode;
       node_cover(&branch.m_rect, otherNode);
 
@@ -839,7 +839,7 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
   // Could just use local here, but member or external is faster since it is
   // reused
   // TODO unique_ptr & overload new operator: accomodating self & branches
-  PartitionVars localVars(this);
+  static PartitionVars localVars(this);
   PartitionVars *parVars = &localVars;
 
   // Load all the branches into a buffer, initialize old node
