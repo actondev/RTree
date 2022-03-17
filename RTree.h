@@ -383,6 +383,9 @@ protected:
       // allocator.print_stats();
     };
     ~PartitionVars() {
+      for (int i = 0; i < MAXNODES + 1; i++) {
+        m_branchBuf[i].~Branch();
+      }
     }
   };
 
