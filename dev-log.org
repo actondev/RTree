@@ -157,7 +157,7 @@ rm -rf callgrind.out.*
 valgrind --tool=callgrind ./build/test/run-tests "benchmark template version"
 valgrind --tool=callgrind ./build/test/run-tests "benchmark"
 
-valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  ./build/test/run-tests "rtree basic ops"
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  ./build/test/run-tests # "benchmark"
   #+end_src
 
 * <2022-03-16 Wed> overloading new etc
@@ -174,3 +174,20 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  
     https://www.amazon.de/Modern-Generic-Programming-Patterns-Applied/dp/0201704315
     has a chapter for allocations
     as seen https://eli.thegreenplace.net/2011/02/17/the-many-faces-of-operator-new-in-c
+
+* <2022-03-17 Thu> dynamic rtree: drtree
+  - attempt some optimizations also to the existing library
+  - compare vs the dynamic one drtree
+  - compare cost of using a high MAXDIMS even when using smaller ones (as I had it)
+    - memory used?
+
+
+  - for 200x200 in dynamic version:
+    ==69281==   total heap usage: 119,454 allocs, 119,454 frees, 10,671,421 bytes allocated
+  - rtree with dimesions of 4:
+    ==69400==   total heap usage: 213,955 allocs, 213,955 frees, 11,674,285 bytes allocated
+    also had errors?
+    ==69400== Invalid read of size 8
+  - rtree with dimensions of 2:
+    ==69842==   total heap usage: 218,824 allocs, 218,824 frees, 9,626,709 bytes allocated
+    
