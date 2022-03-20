@@ -3,6 +3,10 @@
 #+begin_src sh
 rm -rf build
 meson setup build
+
+# comparing performance of drtree vs rtree (template version)
+# makes sense only in optimized code
+meson configure build -Doptimization=2
 #+end_src
 * testing
   #+begin_src sh

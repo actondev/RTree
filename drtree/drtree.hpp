@@ -35,6 +35,7 @@ using std::endl;
                                     // on some systems
 
 // with RECT_ONE_ARRAY it seems slower (wrt RectSphericalVolume)
+// (also with -O2)
 // #define RECT_ONE_ARRAY
 
 #ifdef RECT_ONE_ARRAY
@@ -404,11 +405,11 @@ protected:
     // https://stackoverflow.com/questions/1242830/constructor-initialization-list-evaluation-order
     FixedAllocator allocator;
 
+    Rect m_coverSplit;
     Rect m_cover[2];
     ELEMTYPEREAL m_area[2];
     Branch* m_branchBuf;
     int m_branchCount;
-    Rect m_coverSplit;
     ELEMTYPEREAL m_coverSplitArea;
     PartitionVars() = delete;
     PartitionVars(const DRTREE_QUAL* tree) : PartitionVars(tree->Dimensions()) {}
@@ -1357,7 +1358,7 @@ typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() {
 
   Branch &first_branch = m_root->m_branch[0];
   // init
-  for(int i =0; i<dims; i++) {
+  for(unsigned int i =0; i<dims; i++) {
     rect.low[i] = RECT_MIN_REF(first_branch.m_rect, i);
     rect.high[i] = RECT_MAX_REF(first_branch.m_rect, i);
   }
