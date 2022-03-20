@@ -19,15 +19,19 @@ run_tests = executable(
   test_src,
   dependencies : [
     catch2_dep,
-    RTree_dep,
+    drtree_dep,
   ],
   cpp_args: [
+    # '-DCATCH_CONFIG_ENABLE_BENCHMARKING'
   ]
 )
 test('tests',
      run_tests,
      workdir: meson.project_source_root(),
-     # args: ['[temp]']
+     # args: ['benchmark']
+     # args: ['allocations']
+     # args: ['rtree basic ops']
+     # args: ['bounds after removals & insertions']
     )
 
  

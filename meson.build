@@ -1,4 +1,4 @@
-project('RTree', 'cpp',
+project('drtree', 'cpp',
        	default_options: [
 	  'cpp_std=c++17',
 	],
@@ -6,7 +6,7 @@ project('RTree', 'cpp',
 
 include_dirs = include_directories('.')
 
-RTree_dep = declare_dependency(
+drtree_dep = declare_dependency(
   include_directories: include_dirs
 )
 

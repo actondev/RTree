@@ -2,3 +2,4 @@ subprojects/*
 !subprojects/*.wrap
 .vscode/
 .cache/
+callgrind.out*
