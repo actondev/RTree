@@ -200,3 +200,9 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  
   
   after removing bool needs_cleanup (now constructing rect only with allocator):
   total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
+
+  
+** trying out using one array for the rect, offsetting index for min(low) vs max(high)
+   - RectSphericalVolume was 301,312,719
+   - oh.. with refactor it's worse! 335,506,434
+   - two arrays, but =double* const m_min=: 

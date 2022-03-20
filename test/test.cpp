@@ -237,6 +237,7 @@ TEST_CASE("10x4d rtree", "[benchmark][rtree]") {
 }
 
 // total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
+// RECT_ONE_ARRAY: total heap usage: 119,490 allocs, 119,490 frees, 10,073,986 bytes allocated
 TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
   auto grid = make_grid(200, 2); // 100x100=>10k points
   // cout << pp(grid.points) << endl;
