@@ -116,15 +116,16 @@ protected:
   uint32_t dims; // set by the constructor
   struct Node;   // Fwd decl.  Used by other internal structs and iterator
   struct Branch;
-  struct Rect;
+  struct Rect; // TODO rename to _Rect (not exposed to the outside, constructed only with allocator)
+  struct PublicRect; // using std::vector, to pass info to the user (deconstruction is easy)
   struct PartitionVars;
   uint32_t count = 0;
 
  private:
+  FixedAllocator m_temps_allocator;
   Branch m_insert_branch;
   Branch m_insert_rect_rec_branch;
   Branch m_insert_rect_branch;
-  Rect m_bounds_rect;
   Rect m_remove_rect;
   Rect m_search_rect;
   Rect m_pick_branch_rect;
@@ -193,13 +194,26 @@ public:
   bool Save(RTFileStream &a_stream);
 
 protected:
+  struct PublicRect {
+    std::vector<double> low;
+    std::vector<double> high;
+
+    PublicRect() = delete;
+    PublicRect(const DRTREE_QUAL* tree) : PublicRect(tree->Dimensions()) {
+    }
+    PublicRect(int dims) {
+      low.resize(dims, 0);
+      high.resize(dims, 0);
+    }
+    
+  };
+  
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
     double* m_min; ///< Min dimensions of bounding box
     double* m_max; ///< Max dimensions of bounding box
     Rect() = delete;
     const int dims;
-    bool needs_cleanup = false;
     Rect(const DRTREE_QUAL* tree)
         : Rect(tree->Dimensions())
     {
@@ -211,20 +225,11 @@ protected:
     Rect(int dims, FixedAllocator* allocator = nullptr)
         :dims(dims)
     {
-      // cout << "rect ctor dims " << dims << endl;
-      if(allocator) {
-        // cout << "rect ctor with allocator" << endl;
-        m_min = (double*) allocator->allocate(dims * sizeof(double));
-        m_max = (double*) allocator->allocate(dims * sizeof(double));
-      } else {
-        m_min = new double[dims];
-        m_max = new double[dims];
-        needs_cleanup = true;
-        // cout << "rect ctor without allocator" << endl;
-      }
-      // hmm.. apparently initializing them is not necessary!
-
+      ASSERT(allocator);
+      m_min = (double*) allocator->allocate(dims * sizeof(double));
+      m_max = (double*) allocator->allocate(dims * sizeof(double));
     }
+
     void init(double value) {
       std::fill(m_min, m_min + dims, value);
       std::fill(m_max, m_max + dims, value);
@@ -245,12 +250,6 @@ protected:
       std::copy(other.m_min, other.m_min + dims, m_min);
       std::copy(other.m_max, other.m_max + dims, m_max);
       return *this;
-    }
-    ~Rect() {
-      if(needs_cleanup) {
-        delete[] m_min;
-        delete[] m_max;
-      }
     }
   };
 
@@ -445,23 +444,29 @@ public:
   // return all the AABBs that form the drtree
   std::vector<Rect> ListTree() const;
 
-  Rect Bounds();
+  PublicRect Bounds();
   int Dimensions() const;
 };
 
 
 DRTREE_TEMPLATE
 DRTREE_QUAL::drtree(int dims)
-    : m_insert_branch(dims),
-      m_insert_rect_rec_branch(dims),
-      m_insert_rect_branch(dims),
-      m_bounds_rect(dims),
-      m_remove_rect(dims),
-      m_search_rect(dims),
-      m_pick_branch_rect(dims),
-      m_pick_seeds_rect(dims),
-      m_choose_partition_rect0(dims),
-      m_choose_partition_rect1(dims),
+    : m_temps_allocator(
+      3*Branch::heap_size(dims)
+      + 6*Rect::heap_size(dims)
+    ),
+      // branches
+      m_insert_branch(dims, &m_temps_allocator),
+      m_insert_rect_rec_branch(dims, &m_temps_allocator),
+      m_insert_rect_branch(dims, &m_temps_allocator),
+      // rects
+      m_remove_rect(dims, &m_temps_allocator),
+      m_search_rect(dims, &m_temps_allocator),
+      m_pick_branch_rect(dims, &m_temps_allocator),
+      m_pick_seeds_rect(dims, &m_temps_allocator),
+      m_choose_partition_rect0(dims, &m_temps_allocator),
+      m_choose_partition_rect1(dims, &m_temps_allocator),
+      // only PartitionVars doesn't need an allocator (has its own)
       m_split_parition_vars(dims)
 {
   ASSERT(MAXNODES > MINNODES);
@@ -1313,27 +1318,31 @@ std::vector<typename DRTREE_QUAL::Rect> DRTREE_QUAL::ListTree() const {
 
 // this could be const but I'm modifying a member variable (for avoiding allocations)
 DRTREE_TEMPLATE
-typename DRTREE_QUAL::Rect DRTREE_QUAL::Bounds() {
+typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
+  PublicRect rect{this};
 
   if(m_root->m_count == 0) {
-    m_bounds_rect.init(0);
-    return m_bounds_rect;
+    return rect;
   }
 
   Branch &first_branch = m_root->m_branch[0];
-  m_bounds_rect = first_branch.m_rect; // init
+  // init
+  for(int i =0; i<dims; i++) {
+    rect.low[i] = first_branch.m_rect.m_min[i];
+    rect.high[i] = first_branch.m_rect.m_max[i];
+  }
   for (int branch_id = 1; branch_id < m_root->m_count; branch_id++) {
     Branch &branch = m_root->m_branch[branch_id];
     Rect &other_rect = branch.m_rect;
     for (unsigned int index = 0; index < dims; index++) {
-      m_bounds_rect.m_min[index] = Min(m_bounds_rect.m_min[index], other_rect.m_min[index]);
-      m_bounds_rect.m_max[index] = Max(m_bounds_rect.m_max[index], other_rect.m_max[index]);
+      rect.low[index] = Min(rect.low[index], other_rect.m_min[index]);
+      rect.high[index] = Max(rect.high[index], other_rect.m_max[index]);
     }
   }
 
-  return m_bounds_rect;
+  return rect;
 }
 
 DRTREE_TEMPLATE

@@ -142,16 +142,10 @@ TEST_CASE("bounds after removals & insertions") {
   Point expected_min = {0, 0};
   Point expected_max = {9, 9};
 
-  Point actual_min;
-  Point actual_max;
   auto bounds = tree.Bounds();
-  actual_min.assign(bounds.m_min, bounds.m_min + 2);
-  actual_max.assign(bounds.m_max, bounds.m_max + 2);
-  // actual_min.assign( = bounds.m_min;
-  // actual_max = bounds.m_max;
 
-  REQUIRE(actual_min == expected_min);
-  REQUIRE(actual_max == expected_max);
+  REQUIRE(bounds.low == expected_min);
+  REQUIRE(bounds.high == expected_max);
 
   Callback remove_cb = [](Point node, const double *low, const double *high) {
     return true;
@@ -162,8 +156,8 @@ TEST_CASE("bounds after removals & insertions") {
   tree.Remove(low, high, remove_cb);
 
   bounds = tree.Bounds();
-  actual_min.assign(bounds.m_min, bounds.m_min + 2);
-  actual_max.assign(bounds.m_max, bounds.m_max + 2);
+  // actual_min.assign(bounds.m_min, bounds.m_min + 2);
+  // actual_max.assign(bounds.m_max, bounds.m_max + 2);
 
   expected_min = {3, 3};
   // expected_max = {9,9}; // same
@@ -242,7 +236,7 @@ TEST_CASE("10x4d rtree", "[benchmark][rtree]") {
   
 }
 
-// total heap usage: 144,493 allocs, 144,493 frees, 11,282,724 bytes allocated
+// total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
 TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
   auto grid = make_grid(200, 2); // 100x100=>10k points
   // cout << pp(grid.points) << endl;
@@ -252,6 +246,7 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
   auto t2 = now();
   WARN("init took " << duration_ms(t2 - t1) << "ms");
 
+  // return;
   double low[2] = {5, 2};
   double high[2] = {6, 4};
   std::vector<Point> found;
@@ -278,10 +273,10 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-// total heap usage: 243,691 allocs, 243,691 frees, 10,235,004 bytes allocated
-// 4 MAXDIMS: total heap usage: 243,691 allocs, 243,691 frees, 12,643,964 bytes allocated
-TEST_CASE("200x2d template", "[benchmark][rtree]") {
-#define MAXDIMS 4
+// total heap usage: 218,693 allocs, 218,693 frees, 9,627,530 bytes allocated
+// 4 MAXDIMS: total heap usage: 218,693 allocs, 218,693 frees, 12,036,490 bytes allocated
+TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
+#define MAXDIMS 2
   int dims = 2;
   
   auto grid = make_grid(200, dims);
@@ -292,6 +287,7 @@ TEST_CASE("200x2d template", "[benchmark][rtree]") {
 #undef MAXDIMS
   
   WARN("init took " << duration_ms(t2 - t1) << "ms");
+  // return;
 
   double low[2] = {5, 2};
   double high[2] = {6, 4};

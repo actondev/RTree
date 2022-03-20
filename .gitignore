@@ -3,3 +3,4 @@ subprojects/*
 .vscode/
 .cache/
 callgrind.out*
+massif.out*

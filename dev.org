@@ -3,6 +3,27 @@
 #+begin_src sh
 rm -rf build
 meson setup build
-
-meson test -C build -v
 #+end_src
+* testing
+  #+begin_src sh
+meson test -C build -v
+
+./build/test/run-tests "[benchmark]"
+  #+end_src
+* valgrind (profiling, memory leaks etc)
+  #+begin_src sh
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d drtree"
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d rtree"
+  #+end_src
+** callgrind (performance)
+   #+begin_src sh
+valgrind --tool=callgrind ./build/test/run-tests "200x2d rtree"
+valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree"
+   #+end_src
+** massif (memory allocations)
+   massif-visualizer tool
+   #+begin_src sh
+rm massif.out*
+valgrind --tool=massif ./build/test/run-tests "200x2d drtree"
+valgrind --tool=massif ./build/test/run-tests "200x2d rtree"
+   #+end_src

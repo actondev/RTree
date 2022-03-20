@@ -191,3 +191,12 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  
   - rtree with dimensions of 2:
     ==69842==   total heap usage: 218,824 allocs, 218,824 frees, 9,626,709 bytes allocated
     
+
+  
+* <2022-03-20 Sun> renamed to drtree, some mods
+  200x2d (init only)
+  was:
+  total heap usage: 144,515 allocs, 144,515 frees, 11,283,940 bytes allocated
+  
+  after removing bool needs_cleanup (now constructing rect only with allocator):
+  total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
