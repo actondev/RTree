@@ -154,6 +154,7 @@ protected:
   struct PublicRect; // using std::vector, to pass info to the user (deconstruction is easy)
   struct PartitionVars;
   uint32_t count = 0;
+  uint32_t m_node_count = 0;
 
  private:
   FixedAllocator m_temps_allocator;
@@ -226,6 +227,8 @@ public:
   bool Save(const char *a_fileName);
   /// Save tree contents to stream
   bool Save(RTFileStream &a_stream);
+
+  size_t heap_size() const;
 
 protected:
   struct PublicRect {
@@ -356,11 +359,14 @@ protected:
     Node() = delete;
     int dims;
     FixedAllocator allocator;
+    static size_t heap_size(int dims) {
+      return MAXNODES * (sizeof(Branch) + Branch::heap_size(dims));
+    }
     Node(const DRTREE_QUAL *tree)
         : Node(tree->Dimensions()) { };
     Node(int dims)
         : dims(dims),
-          allocator(MAXNODES * (sizeof(Branch) + Branch::heap_size(dims)))
+          allocator(heap_size(dims))
     {
       m_branch = (Branch*)allocator.allocate(MAXNODES * sizeof(Branch));
       for(int i=0; i<MAXNODES; i++) {
@@ -504,8 +510,7 @@ DRTREE_QUAL::drtree(int dims)
       m_choose_partition_rect0(dims, &m_temps_allocator),
       m_choose_partition_rect1(dims, &m_temps_allocator),
       // only PartitionVars doesn't need an allocator (has its own)
-      m_split_parition_vars(dims)
-{
+      m_split_parition_vars(dims) {
   ASSERT(MAXNODES > MINNODES);
   ASSERT(MINNODES > 0);
   this->dims = dims;
@@ -665,13 +670,15 @@ typename DRTREE_QUAL::Node *DRTREE_QUAL::AllocNode() {
   Node *newNode;
   newNode = new Node(this);
   InitNode(newNode);
+  ++m_node_count;
   return newNode;
 }
 
 DRTREE_TEMPLATE
 void DRTREE_QUAL::FreeNode(Node *a_node) {
   ASSERT(a_node);
-
+  --m_node_count;
+  ASSERT(m_node_count>=0);
   delete a_node;
 }
 
@@ -1377,6 +1384,11 @@ typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() const {
 
 DRTREE_TEMPLATE
 int DRTREE_QUAL::Dimensions() const { return this->dims; }
+
+DRTREE_TEMPLATE
+size_t DRTREE_QUAL::heap_size() const {
+  return m_node_count * Node::heap_size(dims);
+}
 
 // for the copy ctor
 DRTREE_TEMPLATE
