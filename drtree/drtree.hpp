@@ -161,7 +161,7 @@ protected:
   Branch m_insert_rect_rec_branch;
   Branch m_insert_rect_branch;
   Rect m_remove_rect;
-  Rect m_search_rect;
+  mutable Rect m_search_rect;
   Rect m_pick_branch_rect;
   Rect m_pick_seeds_rect;
   Rect m_choose_partition_rect0;
@@ -205,7 +205,7 @@ public:
   /// function to return result. Callback should return 'true' to continue
   /// searching \return Returns the number of entries found
   int Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-             Callback callback);
+             Callback callback) const;
 
   /// Remove all entries from tree
   void RemoveAll();
@@ -215,7 +215,7 @@ public:
 
   /// Count the data elements in this container.  This is slow as no internal
   /// counter is maintained.
-  int Count();
+  int Count() const;
 
   /// Load tree contents from file
   bool Load(const char *a_fileName);
@@ -466,7 +466,7 @@ protected:
   bool Overlap(Rect *a_rectA, Rect *a_rectB) const;
   void ReInsert(Node *a_node, ListNode **a_listNode);
   bool Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-              Callback callback);
+              Callback callback) const;
   void RemoveAllRec(Node *a_node);
   void Reset();
   void MoveChildren(Node* a_node, const ELEMTYPE *a_offset);
@@ -481,7 +481,7 @@ public:
   // return all the AABBs that form the drtree
   std::vector<Rect> ListTree() const;
 
-  PublicRect Bounds();
+  PublicRect Bounds() const;
   int Dimensions() const;
 };
 
@@ -580,7 +580,7 @@ int DRTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
 DRTREE_TEMPLATE
 int DRTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-                       Callback callback) {
+                       Callback callback) const {
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
     ASSERT(a_min[index] <= a_max[index]);
@@ -602,7 +602,7 @@ int DRTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 }
 
 DRTREE_TEMPLATE
-int DRTREE_QUAL::Count() {
+int DRTREE_QUAL::Count() const {
   return count;
 }
 
@@ -1282,7 +1282,7 @@ void DRTREE_QUAL::ReInsert(Node *a_node, ListNode **a_listNode) {
 // argument rectangle.
 DRTREE_TEMPLATE
 bool DRTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-                        Callback callback)  {
+                        Callback callback) const {
   ASSERT(a_node);
   ASSERT(a_node->m_level >= 0);
   ASSERT(a_rect);
@@ -1348,7 +1348,7 @@ std::vector<typename DRTREE_QUAL::Rect> DRTREE_QUAL::ListTree() const {
 
 // this could be const but I'm modifying a member variable (for avoiding allocations)
 DRTREE_TEMPLATE
-typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() {
+typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() const {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
   PublicRect rect{this};
