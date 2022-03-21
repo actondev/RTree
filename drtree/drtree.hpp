@@ -526,10 +526,11 @@ DRTREE_QUAL::drtree(int dims)
   m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[dims];
 }
 
-// DRTREE_TEMPLATE
-// DRTREE_QUAL::drtree(const drtree &other) : drtree() {
-//   CopyRec(m_root, other.m_root);
-// }
+DRTREE_TEMPLATE
+DRTREE_QUAL::drtree(const drtree &other) : drtree(other.dims) {
+  count = other.count;
+  CopyRec(m_root, other.m_root);
+}
 
 DRTREE_TEMPLATE
 DRTREE_QUAL::~drtree() {

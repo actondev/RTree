@@ -246,6 +246,7 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
   drtree<Point> tree = grid_to_rtree(grid);
   auto t2 = now();
   WARN("init took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.Count() == 200*200);
 
   // return;
   double low[2] = {5, 2};
@@ -272,6 +273,16 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
     { 6.0, 4.0 },
   };
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  t1 = now();
+  drtree<Point> tree2 = tree;
+  t2 = now();
+  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+  REQUIRE(tree2.Count() == tree.Count());
+
+  found.clear();
+  tree2.Search(low, high, cb);
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
 // total heap usage: 218,693 allocs, 218,693 frees, 9,627,530 bytes allocated
@@ -285,7 +296,6 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
   auto t1 = now();
   RTree<Point, double, MAXDIMS> tree = grid_to_rtree_template<MAXDIMS>(grid);
   auto t2 = now();
-#undef MAXDIMS
   
   WARN("init took " << duration_ms(t2 - t1) << "ms");
   // return;
@@ -314,6 +324,14 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
     { 6.0, 4.0 },
   };
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  t1 = now();
+  RTree<Point, double, MAXDIMS> tree2 = tree;
+  t2 = now();
+  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+  REQUIRE(tree2.Count() == tree.Count());
+
+  #undef MAXDIMS
 }
 
 TEST_CASE("allocations", "[.temp]") {
