@@ -1,4 +1,5 @@
 #include <drtree/drtree.hpp>
+#include <drtree/drtree2.hpp>
 #include <array>
 #include <catch2/catch.hpp>
 #include <chrono> // for high_resolution_clock
