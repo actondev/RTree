@@ -363,3 +363,29 @@ TEST_CASE("allocations template", "[.temp]") {
   auto t2 = high_resolution_clock::now();
   cout << "init templ took " << duration_ms(t2 - t1) << "ms" << endl;
 }
+
+
+TEST_CASE("drtree2 init", "[drtree2]") {
+  auto grid = make_grid(2, 2);
+
+  auto t1 = high_resolution_clock::now();
+  drtree2<Point> tree = grid_to_drtree2(grid);
+  auto t2 = high_resolution_clock::now();
+  cout << "init drtree2 " << duration_ms(t2 - t1) << "ms" << endl;
+  REQUIRE(tree.Count() == 4);
+
+  std::vector<Point> found;
+  double low[2] = {0, 1};
+  double high[2] = {1, 1};
+  Callback cb = [&](Point node, const double *low, const double *high) {
+    found.push_back(node);
+    return true;
+  };
+  tree.Search(low, high, cb);
+  // REQUIRE(found.size() == 2);
+  std::vector<Point> expected = {
+      {0.0, 1.0},
+      {1.0, 1.0}
+  };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}

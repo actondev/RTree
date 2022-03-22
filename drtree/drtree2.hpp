@@ -1,10 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <optional>
 #include <vector>
-#include <cstddef>
-#include <iostream>
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -31,57 +31,34 @@ using std::endl;
 #define Max std::max
 #endif // Max
 
-#define DRTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower
-                                    // on some systems
+#define DRTREE_USE_SPHERICAL_VOLUME // Better split classification, may be
+                                    // slower on some systems
 
 #define RECT_MIN(rect) 0
 #define RECT_MAX(rect) 0
-
-#define RECTP_MIN(rect) 0
-#define RECTP_MAX(rect) 0
-
-#define RECT_MIN_REF(rect, i) 0
-#define RECT_MAX_REF(rect, i) 0
-
-#define RECTP_MIN_REF(rect, i) 0
-#define RECTP_MAX_REF(rect, i) 0
-
-#define RECT_MIN(rect) 0
-#define RECT_MAX(rect) 0
-
-#define RECTP_MIN(rect) 0
-#define RECTP_MAX(rect) 0
-
-#define RECT_MIN_REF(rect, i) 0
-#define RECT_MAX_REF(rect, i) 0
-
-#define RECTP_MIN_REF(rect, i) 0
-#define RECTP_MAX_REF(rect, i) 0
-
 
 class FixedAllocator2 {
- private:
+private:
   size_t size;
   size_t allocated = 0;
-  uint8_t* block = nullptr;
- public:
+  uint8_t *block = nullptr;
+
+public:
   FixedAllocator2() = delete;
   FixedAllocator2(size_t size) : size(size) {
     // cout << "allocator ctor, size " << size << endl;
     block = new uint8_t[size];
-    if(!block) {
+    if (!block) {
       cout << "could not allocate" << endl;
     }
   }
-  ~FixedAllocator2() {
-    delete[] block;
-  }
+  ~FixedAllocator2() { delete[] block; }
   void print_stats() {
-    printf("Allocator stats: Init size %zu, allocated %zu\n",
-           this->size, allocated);
+    printf("Allocator stats: Init size %zu, allocated %zu\n", this->size,
+           allocated);
   }
-  void* allocate(size_t size) {
-    uint8_t* res = block + allocated;
+  void *allocate(size_t size) {
+    uint8_t *res = block + allocated;
     allocated += size;
     if (allocated > this->size) {
       printf("Allocator exceeded size. Init size %zu allocated %zu requested "
@@ -89,18 +66,18 @@ class FixedAllocator2 {
              this->size, allocated, size);
     }
 
-    // printf("allocated %zu, totally %zu out of %zu\n", size, allocated, this->size);
-    // cout << "allocating " << size << endl;
-    return (void*)res;
-    }
+    // printf("allocated %zu, totally %zu out of %zu\n", size, allocated,
+    // this->size); cout << "allocating " << size << endl;
+    return (void *)res;
+  }
 };
 
 // datatype is what is stored in the tree (for example a gui element)
 // elemtype is double or float
-#define DRTREE_TEMPLATE                                                         \
-  template <class DATATYPE, class ELEMTYPE, class ELEMTYPEREAL,   \
-            int TMAXNODES, int TMINNODES>
-#define DRTREE_QUAL                                                             \
+#define DRTREE_TEMPLATE                                                        \
+  template <class DATATYPE, class ELEMTYPE, class ELEMTYPEREAL, int TMAXNODES, \
+            int TMINNODES>
+#define DRTREE_QUAL                                                            \
   drtree2<DATATYPE, ELEMTYPE, ELEMTYPEREAL, TMAXNODES, TMINNODES>
 
 template <class DATATYPE, class ELEMTYPE = double,
@@ -110,34 +87,74 @@ class drtree2 {
   static_assert(std::numeric_limits<ELEMTYPEREAL>::is_iec559,
                 "'ELEMTYPEREAL' accepts floating-point types only");
 
-  typedef std::function<bool(const DATATYPE &, const ELEMTYPE*, const ELEMTYPE*)> Callback;
+  typedef std::function<bool(const DATATYPE &, const ELEMTYPE *,
+                             const ELEMTYPE *)>
+      Callback;
 
 protected:
   uint32_t dims; // set by the constructor
-  struct Node;   // Fwd decl.  Used by other internal structs and iterator
+  uint16_t m_rect_id = 0;
+  uint16_t m_rects_count = 0;
+
+  mutable std::vector<ELEMTYPE> rects_min;
+  mutable std::vector<ELEMTYPE> rects_max;
+
+  struct Node; // Fwd decl.  Used by other internal structs and iterator
   struct Branch;
   struct Rect;
-  struct PublicRect; // using std::vector, to pass info to the user (deconstruction is easy)
+  struct PublicRect; // using std::vector, to pass info to the user
+                     // (deconstruction is easy)
   struct PartitionVars;
   uint32_t count = 0;
   uint32_t m_node_count = 0;
 
- private:
+private:
   FixedAllocator2 m_temps_allocator;
   Branch m_insert_branch;
   Branch m_insert_rect_rec_branch;
   Branch m_insert_rect_branch;
   Rect m_remove_rect;
+
+  uint16_t make_rect_id() {
+    ++m_rects_count;
+    // TODO store freed up ids
+    rects_min.resize(m_rects_count * dims, 0);
+    rects_max.resize(m_rects_count * dims, 0);
+
+    return m_rect_id++;
+  }
+
+  void copy_rect(const Rect &src, Rect &dst) {
+    for (auto i = 0; i < dims; i++) {
+      // TODO
+      RECT_MIN_REF(dst, i) = RECT_MIN_REF(src, i);
+      RECT_MAX_REF(dst, i) = RECT_MAX_REF(src, i);
+    }
+  }
+  ELEMTYPEREAL &RECT_MIN_REF(const Rect &rect, int dim) {
+    return rects_min.at(rect.id * dims + dim);
+  }
+  ELEMTYPEREAL &RECT_MAX_REF(const Rect &rect, int dim) {
+    return rects_max.at(rect.id * dims + dim);
+  }
+
+  void copy_branch(const Branch &src, Branch &dst) {
+    copy_rect(src.m_rect, dst.m_rect);
+    dst.m_child = src.m_child;
+    dst.m_data = src.m_data;
+  }
+
   mutable Rect m_search_rect;
   Rect m_pick_branch_rect;
   Rect m_pick_seeds_rect;
   Rect m_choose_partition_rect0;
   Rect m_choose_partition_rect1;
   PartitionVars m_split_parition_vars;
+
 public:
   // These constant must be declared after Branch and before Node struct
   // Stuck up here for MSVC 6 compiler.  NSVC .NET 2003 is much happier.
-  
+
   enum {
     MAXNODES = TMAXNODES, ///< Max elements in node
     MINNODES = TMINNODES, ///< Min elements in node
@@ -149,14 +166,13 @@ public:
   drtree2(const drtree2 &other);
   virtual ~drtree2();
 
-
   void Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
               const DATATYPE &a_dataId);
 
   int Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max, Callback predicate);
 
   int Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-             Callback callback) const;
+             Callback callback);
 
   void RemoveAll();
 
@@ -172,51 +188,38 @@ protected:
     std::vector<double> high;
 
     PublicRect() = delete;
-    PublicRect(const DRTREE_QUAL* tree) : PublicRect(tree->Dimensions()) {
-    }
+    PublicRect(const DRTREE_QUAL *tree) : PublicRect(tree->Dimensions()) {}
     PublicRect(int dims) {
       low.resize(dims, 0);
       high.resize(dims, 0);
     }
-    
   };
-  
+
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
     uint16_t id;
     Rect() = delete;
-    Rect(const DRTREE_QUAL* tree)
-    {
-      cout << "rect ctor " <<tree->Dimensions() << endl;
+    Rect(DRTREE_QUAL *tree) {
+      id = tree->make_rect_id();
+      // cout << "rect ctor " << tree->Dimensions() << endl;
     }
-    static size_t heap_size(int dims) {
-      return  2 * dims * sizeof(double);
-    }
+    static size_t heap_size(int dims) { return 2 * dims * sizeof(double); }
 
-//     Rect(int dims, FixedAllocator2* allocator = nullptr)
-//         :dims(dims)
-//     {
-//       ASSERT(allocator);
-// #ifdef RECT_ONE_ARRAY
-//       array = (double*) allocator->allocate(2 * dims * sizeof(double));
-// #else
-//       m_min = (double*) allocator->allocate(dims * sizeof(double));
-//       m_max = (double*) allocator->allocate(dims * sizeof(double));
-// #endif
-//     }
+    //     Rect(int dims, FixedAllocator2* allocator = nullptr)
+    //         :dims(dims)
+    //     {
+    //       ASSERT(allocator);
+    // #ifdef RECT_ONE_ARRAY
+    //       array = (double*) allocator->allocate(2 * dims * sizeof(double));
+    // #else
+    //       m_min = (double*) allocator->allocate(dims * sizeof(double));
+    //       m_max = (double*) allocator->allocate(dims * sizeof(double));
+    // #endif
+    //     }
 
-    Rect(const Rect& other) = delete;
+    Rect(const Rect &other) = delete;
 
-    Rect &operator=(const Rect &other) {
-      cout << "TODO copy assignment rect" << endl;
-// #ifdef RECT_ONE_ARRAY
-//       std::copy(other.array, other.array + 2*dims, array);
-// #else
-//       std::copy(other.m_min, other.m_min + dims, m_min);
-//       std::copy(other.m_max, other.m_max + dims, m_max);
-// #endif
-      return *this;
-    }
+    Rect &operator=(const Rect &other) = delete;
   };
 
   struct Branch {
@@ -225,16 +228,12 @@ protected:
     DATATYPE m_data; ///< Data Id
     int m_dims;
     Branch() = delete;
-    Branch(const DRTREE_QUAL* tree)
-        : m_rect(tree) {
+    Branch(DRTREE_QUAL *tree) : m_rect(tree) {
+      //
     }
-    static size_t heap_size(int dims) {
-      return Rect::heap_size(dims);
-    }
-    Branch(const Branch &other)
-        : Branch(other.m_dims){
-      // cout << "Branch copy ctor" << endl;
-          };
+    static size_t heap_size(int dims) { return Rect::heap_size(dims); }
+    Branch(const Branch &other) = delete;
+    Branch &operator=(const Branch &other) = delete;
   };
 
   /// Node for each branch level
@@ -244,9 +243,9 @@ protected:
     }                                        // Not a leaf, but a internal node
     bool IsLeaf() { return (m_level == 0); } // A leaf, contains data
 
-    int m_count; ///< Count
-    int m_level; ///< Leaf is zero, others positive
-    Branch* m_branch; // we need MAXNODES branches
+    int m_count;      ///< Count
+    int m_level;      ///< Leaf is zero, others positive
+    Branch *m_branch; // we need MAXNODES branches
     Node() = delete;
     int dims;
     FixedAllocator2 allocator;
@@ -254,13 +253,11 @@ protected:
       return MAXNODES * (sizeof(Branch) + Branch::heap_size(dims));
     }
 
-    Node(const DRTREE_QUAL *tree)
-        : dims(tree->Dimensions()),
-          allocator(heap_size(dims))
-    {
-      m_branch = (Branch*)allocator.allocate(MAXNODES * sizeof(Branch));
-      for(int i=0; i<MAXNODES; i++) {
-        new(m_branch+i) Branch(tree);
+    Node(DRTREE_QUAL *tree)
+        : dims(tree->Dimensions()), allocator(heap_size(dims)) {
+      m_branch = (Branch *)allocator.allocate(MAXNODES * sizeof(Branch));
+      for (int i = 0; i < MAXNODES; i++) {
+        new (m_branch + i) Branch(tree);
       }
       // cout << "Node ctor done" <<endl;
     }
@@ -293,18 +290,16 @@ protected:
     Rect m_coverSplit;
     Rect m_cover[2];
     ELEMTYPEREAL m_area[2];
-    Branch* m_branchBuf;
+    Branch *m_branchBuf;
     int m_branchCount;
     ELEMTYPEREAL m_coverSplitArea;
     PartitionVars() = delete;
-    PartitionVars(const DRTREE_QUAL* tree) :
-        m_coverSplit{tree},
-        m_cover{{tree}, {tree}}
-    { }
-      
+    PartitionVars(DRTREE_QUAL *tree)
+        : m_coverSplit{tree}, m_cover{{tree}, {tree}} {}
+
     ~PartitionVars() {
       for (int i = 0; i < MAXNODES + 1; i++) {
-        m_branchBuf[i].~Branch();
+        // m_branchBuf[i].~Branch();
       }
     }
   };
@@ -315,7 +310,7 @@ protected:
   bool InsertRectRec(const Branch &a_branch, Node *a_node, Node **a_newNode,
                      int a_level);
   bool InsertRect(const Branch &a_branch, Node **a_root, int a_level);
-  void node_cover(Rect* dst, Node *a_node);
+  void node_cover(Rect *dst, Node *a_node);
   bool AddBranch(const Branch *a_branch, Node *a_node, Node **a_newNode);
   void DisconnectBranch(Node *a_node, int a_index);
   int PickBranch(const Rect *a_rect, Node *a_node);
@@ -331,18 +326,19 @@ protected:
   void InitParVars(PartitionVars *a_parVars, int a_maxRects, int a_minFill);
   void PickSeeds(PartitionVars *a_parVars);
   void Classify(int a_index, int a_group, PartitionVars *a_parVars);
-  bool RemoveRect(Node **a_root, Rect *a_rect, int &a_removedCount, Callback predicate);
-  bool RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, Callback predicate,
-                     ListNode **a_listNode);
+  bool RemoveRect(Node **a_root, Rect *a_rect, int &a_removedCount,
+                  Callback predicate);
+  bool RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
+                     Callback predicate, ListNode **a_listNode);
   ListNode *AllocListNode();
   void FreeListNode(ListNode *a_listNode);
-  bool Overlap(Rect *a_rectA, Rect *a_rectB) const;
+  bool Overlap(Rect *a_rectA, Rect *a_rectB);
   void ReInsert(Node *a_node, ListNode **a_listNode);
   bool Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-              Callback callback) const;
+              Callback callback);
   void RemoveAllRec(Node *a_node);
   void Reset();
-  void MoveChildren(Node* a_node, const ELEMTYPE *a_offset);
+  void MoveChildren(Node *a_node, const ELEMTYPE *a_offset);
 
   void CopyRec(Node *current, Node *other);
 
@@ -358,24 +354,16 @@ public:
   int Dimensions() const;
 };
 
-
 DRTREE_TEMPLATE
 DRTREE_QUAL::drtree2(int dims)
-    : dims(dims),
-      m_temps_allocator(
-      3*Branch::heap_size(dims)
-      + 6*Rect::heap_size(dims)
-    ),
+    : dims(dims), m_temps_allocator(3 * Branch::heap_size(dims) +
+                                    6 * Rect::heap_size(dims)),
       // branches
-      m_insert_branch(this),
-      m_insert_rect_rec_branch(this),
+      m_insert_branch(this), m_insert_rect_rec_branch(this),
       m_insert_rect_branch(this),
       // rects
-      m_remove_rect(this),
-      m_search_rect(this),
-      m_pick_branch_rect(this),
-      m_pick_seeds_rect(this),
-      m_choose_partition_rect0(this),
+      m_remove_rect(this), m_search_rect(this), m_pick_branch_rect(this),
+      m_pick_seeds_rect(this), m_choose_partition_rect0(this),
       m_choose_partition_rect1(this),
       // only PartitionVars doesn't need an allocator (has its own)
       m_split_parition_vars(this) {
@@ -412,7 +400,7 @@ DRTREE_QUAL::~drtree2() {
 
 DRTREE_TEMPLATE
 void DRTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-                        const DATATYPE &a_dataId) {
+                         const DATATYPE &a_dataId) {
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
     ASSERT(a_min[index] <= a_max[index]);
@@ -424,8 +412,8 @@ void DRTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
     // TODO
-    // RECT_MIN_REF(m_insert_branch.m_rect, axis) = a_min[axis];
-    // RECT_MAX_REF(m_insert_branch.m_rect, axis) = a_max[axis];
+    RECT_MIN_REF(m_insert_branch.m_rect, axis) = a_min[axis];
+    RECT_MAX_REF(m_insert_branch.m_rect, axis) = a_max[axis];
   }
 
   InsertRect(m_insert_branch, &m_root, 0);
@@ -454,7 +442,7 @@ int DRTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 
 DRTREE_TEMPLATE
 int DRTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-                       Callback callback) const {
+                        Callback callback) {
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
     ASSERT(a_min[index] <= a_max[index]);
@@ -476,13 +464,10 @@ int DRTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
 }
 
 DRTREE_TEMPLATE
-int DRTREE_QUAL::Count() const {
-  return count;
-}
-
+int DRTREE_QUAL::Count() const { return count; }
 
 DRTREE_TEMPLATE
-void DRTREE_QUAL::MoveChildren(Node* a_node, const ELEMTYPE *a_offset) {
+void DRTREE_QUAL::MoveChildren(Node *a_node, const ELEMTYPE *a_offset) {
   ASSERT(a_node);
   ASSERT(a_node->m_level >= 0);
   ASSERT(a_offset);
@@ -516,9 +501,7 @@ void DRTREE_QUAL::MoveAll(const ELEMTYPE *a_offset) {
 }
 
 DRTREE_TEMPLATE
-void DRTREE_QUAL::Reset() {
-  RemoveAllRec(m_root);
-}
+void DRTREE_QUAL::Reset() { RemoveAllRec(m_root); }
 
 DRTREE_TEMPLATE
 void DRTREE_QUAL::RemoveAllRec(Node *a_node) {
@@ -547,7 +530,7 @@ DRTREE_TEMPLATE
 void DRTREE_QUAL::FreeNode(Node *a_node) {
   ASSERT(a_node);
   --m_node_count;
-  ASSERT(m_node_count>=0);
+  ASSERT(m_node_count >= 0);
   delete a_node;
 }
 
@@ -559,9 +542,7 @@ typename DRTREE_QUAL::ListNode *DRTREE_QUAL::AllocListNode() {
 }
 
 DRTREE_TEMPLATE
-void DRTREE_QUAL::FreeListNode(ListNode *a_listNode) {
-  delete a_listNode;
-}
+void DRTREE_QUAL::FreeListNode(ListNode *a_listNode) { delete a_listNode; }
 
 DRTREE_TEMPLATE
 void DRTREE_QUAL::InitNode(Node *a_node) {
@@ -578,7 +559,7 @@ void DRTREE_QUAL::InitNode(Node *a_node) {
 // level to insert; e.g. a data rectangle goes in at level = 0.
 DRTREE_TEMPLATE
 bool DRTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
-                               Node **a_newNode, int a_level) {
+                                Node **a_newNode, int a_level) {
   ASSERT(a_node && a_newNode);
   ASSERT(a_level >= 0);
   ASSERT(a_level <= a_node->m_level);
@@ -599,12 +580,14 @@ bool DRTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
     if (!childWasSplit) {
       // Child was not split. Merge the bounding box of the new record with the
       // existing bounding box
-      combine_rects(&(a_node->m_branch[index].m_rect), &a_branch.m_rect, &(a_node->m_branch[index].m_rect));
+      combine_rects(&(a_node->m_branch[index].m_rect), &a_branch.m_rect,
+                    &(a_node->m_branch[index].m_rect));
       return false;
     } else {
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
-      node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
+      node_cover(&a_node->m_branch[index].m_rect,
+                 a_node->m_branch[index].m_child);
 
       m_insert_rect_rec_branch.m_child = otherNode;
       node_cover(&m_insert_rect_rec_branch.m_rect, otherNode);
@@ -632,12 +615,13 @@ bool DRTREE_QUAL::InsertRectRec(const Branch &a_branch, Node *a_node,
 //
 DRTREE_TEMPLATE
 bool DRTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
-                            int a_level) {
+                             int a_level) {
   ASSERT(a_root);
   ASSERT(a_level >= 0 && a_level <= (*a_root)->m_level);
 #ifdef _DEBUG
   for (int index = 0; index < dims; ++index) {
-    ASSERT(RECT_MIN_REF(a_branch.m_rect, index) <= a_branch.m_rect.m_max[index]);
+    ASSERT(RECT_MIN_REF(a_branch.m_rect, index) <=
+           a_branch.m_rect.m_max[index]);
   }
 #endif //_DEBUG
 
@@ -671,9 +655,10 @@ bool DRTREE_QUAL::InsertRect(const Branch &a_branch, Node **a_root,
 // Find the smallest rectangle that includes all rectangles in branches of a
 // node.
 DRTREE_TEMPLATE
-void DRTREE_QUAL::node_cover(Rect* dst, Node *a_node) {
+void DRTREE_QUAL::node_cover(Rect *dst, Node *a_node) {
   ASSERT(a_node);
-  *dst = a_node->m_branch[0].m_rect;
+  // *dst = a_node->m_branch[0].m_rect;
+  copy_rect(a_node->m_branch[0].m_rect, *dst);
   for (int index = 1; index < a_node->m_count; ++index) {
     combine_rects(dst, dst, &(a_node->m_branch[index].m_rect));
   }
@@ -685,13 +670,14 @@ void DRTREE_QUAL::node_cover(Rect* dst, Node *a_node) {
 // Old node updated, becomes one of two.
 DRTREE_TEMPLATE
 bool DRTREE_QUAL::AddBranch(const Branch *a_branch, Node *a_node,
-                           Node **a_newNode) {
+                            Node **a_newNode) {
   ASSERT(a_branch);
   ASSERT(a_node);
 
   if (a_node->m_count < MAXNODES) // Split won't be necessary
   {
-    a_node->m_branch[a_node->m_count] = *a_branch;
+    // a_node->m_branch[a_node->m_count] = *a_branch;
+    copy_branch(*a_branch, a_node->m_branch[a_node->m_count]);
     ++a_node->m_count;
 
     return false;
@@ -759,12 +745,10 @@ void DRTREE_QUAL::combine_rects(const Rect *dst, const Rect *a, const Rect *b) {
 
   for (unsigned int index = 0; index < dims; index++) {
     // TODO
-    // RECTP_MIN_REF(dst, index) = Min(RECTP_MIN_REF(a,index), RECTP_MIN_REF(b, index));
-    // RECTP_MAX_REF(dst, index) = Max(RECTP_MAX_REF(a,index), RECTP_MAX_REF(b, index));
+    RECT_MIN_REF(*dst, index) = Min(RECT_MIN_REF(*a,index), RECT_MIN_REF(*b, index));
+    RECT_MAX_REF(*dst, index) = Max(RECT_MAX_REF(*a,index), RECT_MAX_REF(*b, index));
   }
 }
-
-
 
 // Split a node.
 // Divides the nodes branches and the extra one between two nodes.
@@ -772,7 +756,7 @@ void DRTREE_QUAL::combine_rects(const Rect *dst, const Rect *a, const Rect *b) {
 // Tries more than one method for choosing a partition, uses best result.
 DRTREE_TEMPLATE
 void DRTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
-                           Node **a_newNode) {
+                            Node **a_newNode) {
   ASSERT(a_node);
   ASSERT(a_branch);
 
@@ -790,7 +774,8 @@ void DRTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
   a_node->m_count = 0;
   LoadNodes(a_node, *a_newNode, &m_split_parition_vars);
 
-  ASSERT((a_node->m_count + (*a_newNode)->m_count) == m_split_parition_vars.m_total);
+  ASSERT((a_node->m_count + (*a_newNode)->m_count) ==
+         m_split_parition_vars.m_total);
 }
 
 // Calculate the n-dimensional volume of a rectangle
@@ -801,7 +786,7 @@ ELEMTYPEREAL DRTREE_QUAL::RectVolume(Rect *a_rect) {
   ELEMTYPEREAL volume = (ELEMTYPEREAL)1;
 
   for (int index = 0; index < dims; ++index) {
-    volume *= RECTP_MAX_REF(a_rect, index) - RECTP_MIN_REF(a_rect, index);
+    volume *= RECT_MAX_REF(*a_rect, index) - RECT_MIN_REF(*a_rect, index);
   }
 
   ASSERT(volume >= (ELEMTYPEREAL)0);
@@ -818,9 +803,9 @@ ELEMTYPEREAL DRTREE_QUAL::RectSphericalVolume(Rect *a_rect) {
   ELEMTYPEREAL radius;
 
   for (unsigned int index = 0; index < dims; ++index) {
-    const ELEMTYPEREAL halfExtent = (RECTP_MAX_REF(a_rect, index) -
-                                     RECTP_MIN_REF(a_rect, index)) *
-                              (ELEMTYPEREAL)0.5;
+    const ELEMTYPEREAL halfExtent =
+        (RECT_MAX_REF(*a_rect, index) - RECT_MIN_REF(*a_rect, index)) *
+        (ELEMTYPEREAL)0.5;
     sumOfSquares += halfExtent * halfExtent;
   }
 
@@ -849,7 +834,7 @@ ELEMTYPEREAL DRTREE_QUAL::CalcRectVolume(Rect *a_rect) {
 // Load branch buffer with branches from full node plus the extra branch.
 DRTREE_TEMPLATE
 void DRTREE_QUAL::GetBranches(Node *a_node, const Branch *a_branch,
-                             PartitionVars *a_parVars) {
+                              PartitionVars *a_parVars) {
   ASSERT(a_node);
   ASSERT(a_branch);
 
@@ -857,15 +842,18 @@ void DRTREE_QUAL::GetBranches(Node *a_node, const Branch *a_branch,
 
   // Load the branch buffer
   for (int index = 0; index < MAXNODES; ++index) {
-    a_parVars->m_branchBuf[index] = a_node->m_branch[index];
+    // a_parVars->m_branchBuf[index] = a_node->m_branch[index];
+    copy_branch(a_node->m_branch[index], a_parVars->m_branchBuf[index]);
   }
-  a_parVars->m_branchBuf[MAXNODES] = *a_branch;
+  // a_parVars->m_branchBuf[MAXNODES] = *a_branch;
+  copy_branch(*a_branch, a_parVars->m_branchBuf[MAXNODES]);
   a_parVars->m_branchCount = MAXNODES + 1;
 
   // Calculate rect containing all in the set
   // Note: without implementing Rect copy assignment,
   // when modifying m_coverSplit, it would also modify m_branchBuf[0].m_rect
-  a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
+  // a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
+  copy_rect(a_parVars->m_branchBuf[0].m_rect, a_parVars->m_coverSplit);
   for (int index = 1; index < MAXNODES + 1; ++index) {
     combine_rects(&a_parVars->m_coverSplit, &a_parVars->m_coverSplit,
                   &a_parVars->m_branchBuf[index].m_rect);
@@ -902,11 +890,15 @@ void DRTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
     for (int index = 0; index < a_parVars->m_total; ++index) {
       if (PartitionVars::NOT_TAKEN == a_parVars->m_partition[index]) {
         Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
-        combine_rects(&m_choose_partition_rect0, curRect, &a_parVars->m_cover[0]);
-        combine_rects(&m_choose_partition_rect1, curRect, &a_parVars->m_cover[1]);
+        combine_rects(&m_choose_partition_rect0, curRect,
+                      &a_parVars->m_cover[0]);
+        combine_rects(&m_choose_partition_rect1, curRect,
+                      &a_parVars->m_cover[1]);
 
-        ELEMTYPEREAL growth0 = CalcRectVolume(&m_choose_partition_rect0) - a_parVars->m_area[0];
-        ELEMTYPEREAL growth1 = CalcRectVolume(&m_choose_partition_rect1) - a_parVars->m_area[1];
+        ELEMTYPEREAL growth0 =
+            CalcRectVolume(&m_choose_partition_rect0) - a_parVars->m_area[0];
+        ELEMTYPEREAL growth1 =
+            CalcRectVolume(&m_choose_partition_rect1) - a_parVars->m_area[1];
         ELEMTYPEREAL diff = growth1 - growth0;
         if (diff >= 0) {
           group = 0;
@@ -951,7 +943,7 @@ void DRTREE_QUAL::ChoosePartition(PartitionVars *a_parVars, int a_minFill) {
 // Copy branches from the buffer into two nodes according to the partition.
 DRTREE_TEMPLATE
 void DRTREE_QUAL::LoadNodes(Node *a_nodeA, Node *a_nodeB,
-                           PartitionVars *a_parVars) {
+                            PartitionVars *a_parVars) {
   ASSERT(a_nodeA);
   ASSERT(a_nodeB);
   ASSERT(a_parVars);
@@ -973,7 +965,7 @@ void DRTREE_QUAL::LoadNodes(Node *a_nodeA, Node *a_nodeB,
 // Initialize a PartitionVars structure.
 DRTREE_TEMPLATE
 void DRTREE_QUAL::InitParVars(PartitionVars *a_parVars, int a_maxRects,
-                             int a_minFill) {
+                              int a_minFill) {
   ASSERT(a_parVars);
 
   a_parVars->m_count[0] = a_parVars->m_count[1] = 0;
@@ -1024,9 +1016,12 @@ void DRTREE_QUAL::Classify(int a_index, int a_group, PartitionVars *a_parVars) {
 
   // Calculate combined rect
   if (a_parVars->m_count[a_group] == 0) {
-    a_parVars->m_cover[a_group] = a_parVars->m_branchBuf[a_index].m_rect;
+    // a_parVars->m_cover[a_group] = a_parVars->m_branchBuf[a_index].m_rect;
+    copy_rect(a_parVars->m_branchBuf[a_index].m_rect,
+              a_parVars->m_cover[a_group]);
   } else {
-    combine_rects(&a_parVars->m_cover[a_group], &a_parVars->m_cover[a_group], &a_parVars->m_branchBuf[a_index].m_rect);
+    combine_rects(&a_parVars->m_cover[a_group], &a_parVars->m_cover[a_group],
+                  &a_parVars->m_branchBuf[a_index].m_rect);
   }
 
   // Calculate volume of combined rect
@@ -1040,13 +1035,14 @@ void DRTREE_QUAL::Classify(int a_index, int a_group, PartitionVars *a_parVars) {
 // Returns true if something removed
 // RemoveRect provides for eliminating the root.
 DRTREE_TEMPLATE
-bool DRTREE_QUAL::RemoveRect(Node **a_root, Rect *a_rect, int &a_foundCount, Callback predicate ) {
+bool DRTREE_QUAL::RemoveRect(Node **a_root, Rect *a_rect, int &a_foundCount,
+                             Callback predicate) {
   ASSERT(a_rect && a_root);
   ASSERT(*a_root);
 
   ListNode *reInsertList = NULL;
 
-  if (!RemoveRectRec(*a_root, a_rect, a_foundCount, predicate , &reInsertList)) {
+  if (!RemoveRectRec(*a_root, a_rect, a_foundCount, predicate, &reInsertList)) {
     return false; // nothing removed
   }
 
@@ -1080,7 +1076,8 @@ bool DRTREE_QUAL::RemoveRect(Node **a_root, Rect *a_rect, int &a_foundCount, Cal
 // merges branches on the way back up.
 // Returns true if something removed
 DRTREE_TEMPLATE
-bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount, Callback predicate, ListNode **a_listNode) {
+bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
+                                Callback predicate, ListNode **a_listNode) {
   ASSERT(a_rect && a_node && a_listNode);
   ASSERT(a_node->m_level >= 0);
 
@@ -1089,18 +1086,19 @@ bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
     bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &(a_node->m_branch[index].m_rect))) {
-        if (RemoveRectRec(a_node->m_branch[index].m_child, a_rect, a_removedCount,
-                          predicate,
-                           a_listNode)) {
+        if (RemoveRectRec(a_node->m_branch[index].m_child, a_rect,
+                          a_removedCount, predicate, a_listNode)) {
           if (a_node->m_branch[index].m_child->m_count >= MINNODES) {
             // child removed, just resize parent rect
-            node_cover(&a_node->m_branch[index].m_rect, a_node->m_branch[index].m_child);
+            node_cover(&a_node->m_branch[index].m_rect,
+                       a_node->m_branch[index].m_child);
           } else {
             // child removed, not enough entries in node, eliminate node
             ReInsert(a_node->m_branch[index].m_child, a_listNode);
             DisconnectBranch(a_node, index);
             // NB: Before remove refactor this was returning
-            index--; // have to revisit same index, as now it's swapped with the last item
+            index--; // have to revisit same index, as now it's swapped with the
+                     // last item
           }
           removed = true;
         }
@@ -1112,12 +1110,15 @@ bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
     bool removed = false;
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
-        Branch& branch = a_node->m_branch[index];
-        if (predicate(branch.m_data, RECT_MIN(branch.m_rect), RECT_MAX(branch.m_rect))) {
+        Branch &branch = a_node->m_branch[index];
+        // TODO rect_min container reference
+        if (predicate(branch.m_data, RECT_MIN(branch.m_rect),
+                      RECT_MAX(branch.m_rect))) {
           removed = true;
           DisconnectBranch(a_node, index);
           // NB: Before remove refactor this was returning
-          index--; // have to revisit same index, as now it's swapped with the last item
+          index--; // have to revisit same index, as now it's swapped with the
+                   // last item
           a_removedCount++;
         }
       }
@@ -1128,12 +1129,12 @@ bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
 
 // Decide whether two rectangles overlap.
 DRTREE_TEMPLATE
-bool DRTREE_QUAL::Overlap(Rect *a_rectA, Rect *a_rectB) const {
+bool DRTREE_QUAL::Overlap(Rect *a_rectA, Rect *a_rectB) {
   ASSERT(a_rectA && a_rectB);
 
   for (unsigned int index = 0; index < dims; ++index) {
-    if (RECTP_MIN_REF(a_rectA, index) > RECTP_MAX_REF(a_rectB, index) ||
-        RECTP_MIN_REF(a_rectB, index) > RECTP_MAX_REF(a_rectA, index)) {
+    if (RECT_MIN_REF(*a_rectA, index) > RECT_MAX_REF(*a_rectB, index) ||
+        RECT_MIN_REF(*a_rectB, index) > RECT_MAX_REF(*a_rectA, index)) {
       return false;
     }
   }
@@ -1156,7 +1157,7 @@ void DRTREE_QUAL::ReInsert(Node *a_node, ListNode **a_listNode) {
 // argument rectangle.
 DRTREE_TEMPLATE
 bool DRTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-                        Callback callback) const {
+                         Callback callback) {
   ASSERT(a_node);
   ASSERT(a_node->m_level >= 0);
   ASSERT(a_rect);
@@ -1176,10 +1177,11 @@ bool DRTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
     // This is a leaf node
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
-        Branch& branch = a_node->m_branch[index];
+        Branch &branch = a_node->m_branch[index];
         DATATYPE &data = branch.m_data;
         ++a_foundCount;
 
+        // TODO rect_min container reference
         if (!callback(data, RECT_MIN(branch.m_rect), RECT_MAX(branch.m_rect))) {
           return false; // Don't continue searching
         }
@@ -1220,20 +1222,21 @@ std::vector<typename DRTREE_QUAL::Rect> DRTREE_QUAL::ListTree() const {
   return treeList;
 }
 
-// this could be const but I'm modifying a member variable (for avoiding allocations)
+// this could be const but I'm modifying a member variable (for avoiding
+// allocations)
 DRTREE_TEMPLATE
 typename DRTREE_QUAL::PublicRect DRTREE_QUAL::Bounds() const {
   ASSERT(m_root);
   ASSERT(m_root->m_level >= 0);
   PublicRect rect{this};
 
-  if(m_root->m_count == 0) {
+  if (m_root->m_count == 0) {
     return rect;
   }
 
   Branch &first_branch = m_root->m_branch[0];
   // init
-  for(unsigned int i =0; i<dims; i++) {
+  for (unsigned int i = 0; i < dims; i++) {
     rect.low[i] = RECT_MIN_REF(first_branch.m_rect, i);
     rect.high[i] = RECT_MAX_REF(first_branch.m_rect, i);
   }
@@ -1269,7 +1272,8 @@ void DRTREE_QUAL::CopyRec(Node *current, Node *other) {
       Branch *currentBranch = &current->m_branch[index];
       Branch *otherBranch = &other->m_branch[index];
 
-      currentBranch->m_rect = otherBranch->m_rect;
+      copy_rect(otherBranch->m_rect, currentBranch->m_rect);
+      // currentBranch->m_rect = otherBranch->m_rect;
       currentBranch->m_child = AllocNode();
       CopyRec(currentBranch->m_child, otherBranch->m_child);
     }
@@ -1279,7 +1283,8 @@ void DRTREE_QUAL::CopyRec(Node *current, Node *other) {
       Branch *currentBranch = &current->m_branch[index];
       Branch *otherBranch = &other->m_branch[index];
 
-      currentBranch->m_rect = otherBranch->m_rect;
+      // currentBranch->m_rect = otherBranch->m_rect;
+      copy_rect(otherBranch->m_rect, currentBranch->m_rect);
       currentBranch->m_data = otherBranch->m_data;
     }
   }
@@ -1291,11 +1296,6 @@ void DRTREE_QUAL::CopyRec(Node *current, Node *other) {
 #undef RECT_MIN
 #undef RECT_MAX
 
-#undef RECTP_MIN
-#undef RECTP_MAX
-
 #undef RECT_MIN_REF
 #undef RECT_MAX_REF
 
-#undef RECTP_MIN_REF
-#undef RECTP_MAX_REF
