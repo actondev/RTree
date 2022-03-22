@@ -72,6 +72,15 @@ drtree<Point> grid_to_rtree(const Grid &grid) {
   return tree;
 }
 
+drtree2<Point> grid_to_drtree2(const Grid &grid) {
+  drtree2<Point, double> tree(grid.dims);
+  for (auto &el : grid.points) {
+    const double *pos = &el[0];
+    tree.Insert(pos, pos, el);
+  }
+  return tree;
+}
+
 template <int DIMS>
 RTree<Point, double, DIMS> grid_to_rtree_template(const Grid &grid, int dims = 0) {
   if(dims == 0) dims = grid.dims;
