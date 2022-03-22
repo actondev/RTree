@@ -34,9 +34,6 @@ using std::endl;
 #define DRTREE_USE_SPHERICAL_VOLUME // Better split classification, may be
                                     // slower on some systems
 
-#define RECT_MIN(rect) 0
-#define RECT_MAX(rect) 0
-
 class FixedAllocator2 {
 private:
   size_t size;
@@ -93,8 +90,9 @@ class drtree2 {
 
 protected:
   uint32_t dims; // set by the constructor
-  uint16_t m_rect_id = 0;
-  uint16_t m_rects_count = 0;
+  // TODO uint16_t runs out with 200x200 & no reusing ids..?
+  uint32_t m_rect_id = 0;
+  uint32_t m_rects_count = 0;
 
   mutable std::vector<ELEMTYPE> rects_min;
   mutable std::vector<ELEMTYPE> rects_max;
@@ -126,7 +124,6 @@ private:
 
   void copy_rect(const Rect &src, Rect &dst) {
     for (auto i = 0; i < dims; i++) {
-      // TODO
       RECT_MIN_REF(dst, i) = RECT_MIN_REF(src, i);
       RECT_MAX_REF(dst, i) = RECT_MAX_REF(src, i);
     }
@@ -136,6 +133,14 @@ private:
   }
   ELEMTYPEREAL &RECT_MAX_REF(const Rect &rect, int dim) {
     return rects_max.at(rect.id * dims + dim);
+  }
+
+  ELEMTYPEREAL *RECT_MIN(const Rect &rect) {
+    return rects_min.data() + rect.id * dims;
+  }
+
+  ELEMTYPEREAL *RECT_MAX(const Rect &rect) {
+    return rects_max.data() + rect.id * dims;
   }
 
   void copy_branch(const Branch &src, Branch &dst) {
@@ -171,8 +176,7 @@ public:
 
   int Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max, Callback predicate);
 
-  int Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
-             Callback callback);
+  int Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max, Callback callback);
 
   void RemoveAll();
 
@@ -197,7 +201,7 @@ protected:
 
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
-    uint16_t id;
+    uint32_t id;
     Rect() = delete;
     Rect(DRTREE_QUAL *tree) {
       id = tree->make_rect_id();
@@ -261,9 +265,8 @@ protected:
       }
       // cout << "Node ctor done" <<endl;
     }
-    Node(const Node &other) : Node(other.dims) {
-      cout << "Node copy ctor" << endl;
-    };
+    Node(const Node &other) = delete;
+    Node &operator=(const Node &other) = delete;
     ~Node() {
       // delete m_branch;
       for (int i = 0; i < MAXNODES; i++) {
@@ -281,6 +284,7 @@ protected:
   /// Variables for finding a split partition
   struct PartitionVars {
     enum { NOT_TAKEN = -1 }; // indicates that position
+    FixedAllocator2 allocator;
 
     int m_partition[MAXNODES + 1];
     int m_total;
@@ -294,12 +298,19 @@ protected:
     int m_branchCount;
     ELEMTYPEREAL m_coverSplitArea;
     PartitionVars() = delete;
-    PartitionVars(DRTREE_QUAL *tree)
-        : m_coverSplit{tree}, m_cover{{tree}, {tree}} {}
+    PartitionVars(DRTREE_QUAL *tree):
+        // TODO how much size do we need?
+        allocator((MAXNODES+1) * (sizeof(Branch) + Branch::heap_size(tree->Dimensions()))),
+        m_coverSplit{tree}, m_cover{{tree}, {tree}} {
+      m_branchBuf = (Branch *)allocator.allocate((MAXNODES + 1) * sizeof(Branch));
+      for (int i = 0; i < MAXNODES + 1; i++) {
+        new (m_branchBuf + i) Branch(tree);
+      }
+    }
 
     ~PartitionVars() {
       for (int i = 0; i < MAXNODES + 1; i++) {
-        // m_branchBuf[i].~Branch();
+        m_branchBuf[i].~Branch();
       }
     }
   };
@@ -334,8 +345,7 @@ protected:
   void FreeListNode(ListNode *a_listNode);
   bool Overlap(Rect *a_rectA, Rect *a_rectB);
   void ReInsert(Node *a_node, ListNode **a_listNode);
-  bool Search(Node *a_node, Rect *a_rect, int &a_foundCount,
-              Callback callback);
+  bool Search(Node *a_node, Rect *a_rect, int &a_foundCount, Callback callback);
   void RemoveAllRec(Node *a_node);
   void Reset();
   void MoveChildren(Node *a_node, const ELEMTYPE *a_offset);
@@ -411,7 +421,6 @@ void DRTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   m_insert_branch.m_child = NULL;
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
-    // TODO
     RECT_MIN_REF(m_insert_branch.m_rect, axis) = a_min[axis];
     RECT_MAX_REF(m_insert_branch.m_rect, axis) = a_max[axis];
   }
@@ -744,9 +753,10 @@ void DRTREE_QUAL::combine_rects(const Rect *dst, const Rect *a, const Rect *b) {
   ASSERT(dst && a && b);
 
   for (unsigned int index = 0; index < dims; index++) {
-    // TODO
-    RECT_MIN_REF(*dst, index) = Min(RECT_MIN_REF(*a,index), RECT_MIN_REF(*b, index));
-    RECT_MAX_REF(*dst, index) = Max(RECT_MAX_REF(*a,index), RECT_MAX_REF(*b, index));
+    RECT_MIN_REF(*dst, index) =
+        Min(RECT_MIN_REF(*a, index), RECT_MIN_REF(*b, index));
+    RECT_MAX_REF(*dst, index) =
+        Max(RECT_MAX_REF(*a, index), RECT_MAX_REF(*b, index));
   }
 }
 
@@ -1111,7 +1121,6 @@ bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch &branch = a_node->m_branch[index];
-        // TODO rect_min container reference
         if (predicate(branch.m_data, RECT_MIN(branch.m_rect),
                       RECT_MAX(branch.m_rect))) {
           removed = true;
@@ -1181,7 +1190,6 @@ bool DRTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
         DATATYPE &data = branch.m_data;
         ++a_foundCount;
 
-        // TODO rect_min container reference
         if (!callback(data, RECT_MIN(branch.m_rect), RECT_MAX(branch.m_rect))) {
           return false; // Don't continue searching
         }
@@ -1298,4 +1306,3 @@ void DRTREE_QUAL::CopyRec(Node *current, Node *other) {
 
 #undef RECT_MIN_REF
 #undef RECT_MAX_REF
-

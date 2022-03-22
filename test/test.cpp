@@ -344,6 +344,56 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
   #undef MAXDIMS
 }
 
+TEST_CASE("200x2d drtree2", "[drtree2]") {
+  // hmm.. running out of rect ids with 200x200? (100x100 works)
+  // and uint16_t
+  auto grid = make_grid(200, 2); // 100x100=>10k points
+  // cout << pp(grid.points) << endl;
+
+  auto t1 = now();
+  drtree2<Point> tree = grid_to_drtree2(grid);
+  auto t2 = now();
+  WARN("init took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.Count() == 200*200);
+
+  // return;
+  double low[2] = {5, 2};
+  double high[2] = {6, 4};
+  std::vector<Point> found;
+  Callback cb = [&](Point node, const double *low, const double *high) {
+    found.push_back(node);
+    return true;
+  };
+  t1 = now();
+  // for (int i = 0; i < 1000; i++) {
+    found.clear();
+    tree.Search(low, high, cb);
+  // }
+  t2 = now();
+  // WARN("search x1000 took " << duration_ms(t2 - t1) << " ms ");
+  // TODO found 0?
+  REQUIRE(found.size() == 6);
+  std::vector<Point> expected = {
+    { 5.0, 2.0 },
+    { 5.0, 3.0 },
+    { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  // t1 = now();
+  // drtree<Point> tree2 = tree;
+  // t2 = now();
+  // WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+  // REQUIRE(tree2.Count() == tree.Count());
+
+  // found.clear();
+  // tree2.Search(low, high, cb);
+  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
 TEST_CASE("allocations", "[.temp]") {
   auto grid = make_grid(2, 2);
   // cout << pp(grid.points) << endl;
