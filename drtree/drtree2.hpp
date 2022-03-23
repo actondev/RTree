@@ -88,14 +88,23 @@ class drtree2 {
                              const ELEMTYPE *)>
       Callback;
 
+  typedef uint32_t Id;
+
 protected:
   uint32_t dims; // set by the constructor
   // TODO uint16_t runs out with 200x200 & no reusing ids..?
-  uint32_t m_rect_id = 0;
-  uint32_t m_rects_count = 0;
+  Id m_rect_id = 0;
+  Id m_rects_count = 0;
+  Id m_rects_freed = 0;
+
+  Id m_branches_count = 0;
+  Id m_branch_id = 0;
 
   mutable std::vector<ELEMTYPE> rects_min;
   mutable std::vector<ELEMTYPE> rects_max;
+
+  // TODO can makes this vector of optionals
+  std::vector<DATATYPE> branches_data;
 
   struct Node; // Fwd decl.  Used by other internal structs and iterator
   struct Branch;
@@ -113,7 +122,7 @@ private:
   Branch m_insert_rect_branch;
   Rect m_remove_rect;
 
-  uint16_t make_rect_id() {
+  Id make_rect_id() {
     ++m_rects_count;
     // TODO store freed up ids
     rects_min.resize(m_rects_count * dims, 0);
@@ -122,18 +131,39 @@ private:
     return m_rect_id++;
   }
 
+  Id make_branch_id() {
+    ++m_branches_count;
+    branches_data.resize(m_branches_count);
+
+    return m_branch_id++;
+  }
+
+
+  DATATYPE &branch_data(const Branch& branch) {
+    return branches_data[branch.id];
+  }
+
+  void set_branch_data(const Branch& branch, DATATYPE data ) {
+    branches_data[branch.id] = data;
+  }
+
   void copy_rect(const Rect &src, Rect &dst) {
     for (auto i = 0; i < dims; i++) {
       RECT_MIN_REF(dst, i) = RECT_MIN_REF(src, i);
       RECT_MAX_REF(dst, i) = RECT_MAX_REF(src, i);
     }
   }
+  // [] vs at: RectSphericalVolume 161M vs 237M in callgrind
   ELEMTYPEREAL &RECT_MIN_REF(const Rect &rect, int dim) {
-    return rects_min.at(rect.id * dims + dim);
+    // return rects_min.at(rect.id * dims + dim);
+    return rects_min[rect.id * dims + dim];
   }
   ELEMTYPEREAL &RECT_MAX_REF(const Rect &rect, int dim) {
-    return rects_max.at(rect.id * dims + dim);
+    // return rects_max.at(rect.id * dims + dim);
+    return rects_max[rect.id * dims + dim];
   }
+
+  Id rect_index(const Rect &rect) { return rect.id * dims; }
 
   ELEMTYPEREAL *RECT_MIN(const Rect &rect) {
     return rects_min.data() + rect.id * dims;
@@ -146,7 +176,8 @@ private:
   void copy_branch(const Branch &src, Branch &dst) {
     copy_rect(src.m_rect, dst.m_rect);
     dst.m_child = src.m_child;
-    dst.m_data = src.m_data;
+    // dst.m_data = src.m_data;
+    set_branch_data(dst, branch_data(src));
   }
 
   mutable Rect m_search_rect;
@@ -201,9 +232,12 @@ protected:
 
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
-    uint32_t id;
+    // making this const doesn't improve performance..?
+    Id id;
     Rect() = delete;
-    Rect(DRTREE_QUAL *tree) {
+    Rect(DRTREE_QUAL *tree)
+        // :id{tree->make_rect_id()}
+    {
       id = tree->make_rect_id();
       // cout << "rect ctor " << tree->Dimensions() << endl;
     }
@@ -224,16 +258,21 @@ protected:
     Rect(const Rect &other) = delete;
 
     Rect &operator=(const Rect &other) = delete;
+
+    ~Rect() {
+      // cout << "rect dtor " << endl;
+    }
   };
 
   struct Branch {
+    Id id;
     Rect m_rect;     ///< Bounds
     Node *m_child;   ///< Child node
-    DATATYPE m_data; ///< Data Id
-    int m_dims;
     Branch() = delete;
+    Branch(Id id): id{id}{}
     Branch(DRTREE_QUAL *tree) : m_rect(tree) {
       //
+      id = tree->make_branch_id();
     }
     static size_t heap_size(int dims) { return Rect::heap_size(dims); }
     Branch(const Branch &other) = delete;
@@ -268,6 +307,7 @@ protected:
     Node(const Node &other) = delete;
     Node &operator=(const Node &other) = delete;
     ~Node() {
+      // cout << "Node dtor" << endl;
       // delete m_branch;
       for (int i = 0; i < MAXNODES; i++) {
         m_branch[i].~Branch();
@@ -417,7 +457,8 @@ void DRTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
   }
 #endif //_DEBUG
 
-  m_insert_branch.m_data = a_dataId;
+  // m_insert_branch.m_data = a_dataId;
+  set_branch_data(m_insert_branch, a_dataId);
   m_insert_branch.m_child = NULL;
 
   for (unsigned int axis = 0; axis < dims; ++axis) {
@@ -686,6 +727,7 @@ bool DRTREE_QUAL::AddBranch(const Branch *a_branch, Node *a_node,
   if (a_node->m_count < MAXNODES) // Split won't be necessary
   {
     // a_node->m_branch[a_node->m_count] = *a_branch;
+    // TODO what if I now only "create" a branch in the node?
     copy_branch(*a_branch, a_node->m_branch[a_node->m_count]);
     ++a_node->m_count;
 
@@ -812,10 +854,17 @@ ELEMTYPEREAL DRTREE_QUAL::RectSphericalVolume(Rect *a_rect) {
   ELEMTYPEREAL sumOfSquares = (ELEMTYPEREAL)0;
   ELEMTYPEREAL radius;
 
+  // const Id rect_idx = rect_index(*a_rect);
+
   for (unsigned int index = 0; index < dims; ++index) {
+    // 1st variant better according to callgrind?
+    // 161M vs 184M
     const ELEMTYPEREAL halfExtent =
         (RECT_MAX_REF(*a_rect, index) - RECT_MIN_REF(*a_rect, index)) *
         (ELEMTYPEREAL)0.5;
+    // const ELEMTYPEREAL halfExtent = rects_max[rect_idx + index] - rects_min[rect_idx + index] *
+    //     (ELEMTYPEREAL)0.5;
+                                    
     sumOfSquares += halfExtent * halfExtent;
   }
 
@@ -1121,7 +1170,7 @@ bool DRTREE_QUAL::RemoveRectRec(Node *a_node, Rect *a_rect, int &a_removedCount,
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch &branch = a_node->m_branch[index];
-        if (predicate(branch.m_data, RECT_MIN(branch.m_rect),
+        if (predicate(branch_data(branch), RECT_MIN(branch.m_rect),
                       RECT_MAX(branch.m_rect))) {
           removed = true;
           DisconnectBranch(a_node, index);
@@ -1187,7 +1236,7 @@ bool DRTREE_QUAL::Search(Node *a_node, Rect *a_rect, int &a_foundCount,
     for (int index = 0; index < a_node->m_count; ++index) {
       if (Overlap(a_rect, &a_node->m_branch[index].m_rect)) {
         Branch &branch = a_node->m_branch[index];
-        DATATYPE &data = branch.m_data;
+        const DATATYPE &data = branch_data(branch);
         ++a_foundCount;
 
         if (!callback(data, RECT_MIN(branch.m_rect), RECT_MAX(branch.m_rect))) {
@@ -1293,7 +1342,8 @@ void DRTREE_QUAL::CopyRec(Node *current, Node *other) {
 
       // currentBranch->m_rect = otherBranch->m_rect;
       copy_rect(otherBranch->m_rect, currentBranch->m_rect);
-      currentBranch->m_data = otherBranch->m_data;
+      // currentBranch->m_data = otherBranch->m_data;
+      set_branch_data(*currentBranch, branch_data(*otherBranch));
     }
   }
 }

@@ -24,6 +24,7 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose .
    #+begin_src sh
 valgrind --tool=callgrind ./build/test/run-tests "200x2d rtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree"
+valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree2"
    #+end_src
 ** massif (memory allocations)
    massif-visualizer tool

@@ -204,5 +204,79 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose  
   
 ** trying out using one array for the rect, offsetting index for min(low) vs max(high)
    - RectSphericalVolume was 301,312,719
+   - combine_rects: 265,608,658
+     
    - oh.. with refactor it's worse! 335,506,434
    - two arrays, but =double* const m_min=: 
+
+    RTree (template version) has
+     - RectSphericalVolume 268,915,845
+     - CombineRect 256,292,035
+
+** godbolt
+   #+begin_src c++
+#include <iostream>
+
+using std::cout;
+
+struct Rect {
+    const int dims = 2;
+    double low[2];
+    double high[2];
+    double volume() {
+        double res = 0;
+        for(int i=0; i<dims; i++) {
+            res *= high[i] - low[i];
+        }
+        return res;
+    }
+};
+
+struct Rect2 {
+    const int dims;
+    double* low;
+    double* high;
+    Rect2(int dims) :dims{dims} {
+        low = new double[dims];
+        high = new double[dims];
+    }
+    double volume() {
+        double res = 0;
+        for(int i=0; i<dims; i++) {
+            res *= high[i] - low[i];
+        }
+        return res;
+    }
+};
+
+double calc_volume(Rect* rect) {
+    double res = 0;
+        for(int i=0; i<rect->dims; i++) {
+            res *= rect->high[i] - rect->low[i];
+        }
+    return res;
+}
+
+double calc_volume2(Rect2* rect) {
+    double res = 0;
+        for(int i=0; i<rect->dims; i++) {
+            res *= rect->high[i] - rect->low[i];
+        }
+    return res;
+}
+
+int main() {
+    Rect r;
+    Rect2 r2(2);
+    // double vol = r.volume();
+    // double vol = calc_volume(&r);
+    double vol = r2.volume();
+    cout << "volume " << vol;
+
+}
+   #+end_src
+
+   
+* <2022-03-23 Wed> drtree2: trying the idea of handles vs pointers
+  - <2022-03-23 Wed> MVP of having Rect being a handle, storing ALL rects in one std::vector
+    the idea is that copy ctor for the rtree will be much faster

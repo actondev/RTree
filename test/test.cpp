@@ -344,7 +344,7 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
   #undef MAXDIMS
 }
 
-TEST_CASE("200x2d drtree2", "[drtree2]") {
+TEST_CASE("200x2d drtree2", "[benchmark][drtree2]") {
   // hmm.. running out of rect ids with 200x200? (100x100 works)
   // and uint16_t
   auto grid = make_grid(200, 2); // 100x100=>10k points
@@ -416,26 +416,35 @@ TEST_CASE("allocations template", "[.temp]") {
 
 
 TEST_CASE("drtree2 init", "[drtree2]") {
-  auto grid = make_grid(2, 2);
+  auto grid = make_grid(10, 2);
 
   auto t1 = high_resolution_clock::now();
   drtree2<Point> tree = grid_to_drtree2(grid);
   auto t2 = high_resolution_clock::now();
   cout << "init drtree2 " << duration_ms(t2 - t1) << "ms" << endl;
-  REQUIRE(tree.Count() == 4);
+  // REQUIRE(tree.Count() == 100);
 
+  double low[2] = {5, 2};
+  double high[2] = {6, 4};
   std::vector<Point> found;
-  double low[2] = {0, 1};
-  double high[2] = {1, 1};
   Callback cb = [&](Point node, const double *low, const double *high) {
     found.push_back(node);
     return true;
   };
+
   tree.Search(low, high, cb);
   // REQUIRE(found.size() == 2);
+  REQUIRE(found.size() == 6);
   std::vector<Point> expected = {
-      {0.0, 1.0},
-      {1.0, 1.0}
+    { 5.0, 2.0 },
+    { 5.0, 3.0 },
+    { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
   };
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+  cout << "drtree2 test done " << endl;
+    
+
 }
