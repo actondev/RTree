@@ -2,6 +2,71 @@
 #include "drtree/drtree3_template.hpp"
 
 DRTREE_TEMPLATE
+std::vector<std::reference_wrapper<const DATATYPE>> QUAL::search(VEC low, VEC high) {
+  std::vector<std::reference_wrapper<const DATATYPE>> found;
+    Callback cb = [&](const DATATYPE& data, const double *low, const double *high) {
+      found.push_back(data);
+    return true;
+  };
+  search(low, high, cb);
+  return found;
+}
+
+DRTREE_TEMPLATE
+int QUAL::search(VEC low, VEC high, Callback callback) {
+  ASSERT(low.size() == m_dims);
+  ASSERT(high.size() == m_dims);
+  for (unsigned int axis = 0; axis < m_dims; ++axis) {
+    rect_min_ref(m_search_rect, axis) = low.data()[axis];
+    rect_max_ref(m_search_rect, axis) = high.data()[axis];
+  }
+
+  int found_count = 0;
+  Search(m_root_id, m_search_rect, found_count, callback);
+
+  return found_count;
+}
+
+DRTREE_TEMPLATE
+bool QUAL::Search(Nid nid, Rid rid, int &found_count,
+                         Callback callback) {
+  // ASSERT(a_node);
+  // ASSERT(a_node->m_level >= 0);
+  // ASSERT(a_rect);
+  Node& node = get_node(nid);
+  Bid nbid = node.get_branch(0);
+  if (node.is_internal()) {
+    // This is an internal node in the tree
+    for (int index = 0; index < node.count; ++index, ++nbid) {
+      Branch& branch = get_branch(nbid);
+      if (Overlap(rid, branch.rect_id)) {
+        if (!Search(branch.child, rid, found_count,
+                    callback)) {
+          // The callback indicated to stop searching
+          return false;
+        }
+      }
+    }
+  } else {
+    // This is a leaf node
+    for (int index = 0; index < node.count; ++index, ++nbid) {
+      Branch& branch = get_branch(nbid);
+      if (Overlap(rid, branch.rect_id)) {
+        const DATATYPE &data = branch_data(nbid);
+        ++found_count;
+
+        if (!callback(data, rect_min(branch.rect_id), rect_max(branch.rect_id))) {
+          return false; // Don't continue searching
+        }
+      }
+    }
+  }
+
+  return true; // Continue searching
+}
+
+
+DRTREE_TEMPLATE
 void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
                          const DATATYPE &data) {
 #ifdef _DEBUG
@@ -248,4 +313,18 @@ ELEMTYPE QUAL::CalcRectVolume(Rid rid) {
 #else                                 // RTREE_USE_SPHERICAL_VOLUME
   return RectVolume(rid); // Faster but can cause poor merges
 #endif                                // RTREE_USE_SPHERICAL_VOLUME
+}
+
+// Decide whether two rectangles overlap.
+DRTREE_TEMPLATE
+bool QUAL::Overlap(Rid a, Rid b) {
+  ASSERT(a && b);
+
+  for (unsigned int index = 0; index < m_dims; ++index) {
+    if (rect_min_ref(a, index) > rect_max_ref(b, index) ||
+        rect_min_ref(b, index) > rect_max_ref(a, index)) {
+      return false;
+    }
+  }
+  return true;
 }

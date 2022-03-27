@@ -39,9 +39,9 @@ class drtree3 {
                              const ELEMTYPE *)>
   Callback;
   typedef TPartitionVars<ELEMTYPE> PartitionVars;
+  typedef std::vector<ELEMTYPE> VEC;
 
-
- private:
+private:
   const int MAXNODES = 8;
   const int MINNODES = MAXNODES/2;
   ELEMTYPE m_unitSphereVolume;
@@ -56,6 +56,7 @@ class drtree3 {
   Bid m_insert_rect_branch;
   Rid m_remove_rect;
   Rid m_pick_branch_rect;
+  Rid m_search_rect;
 
   unsigned int m_dims; // set by the constructor
   size_t m_size = 0;
@@ -128,14 +129,18 @@ class drtree3 {
     m_branches_data[bid.id] = data;
   }
 
+  const DATATYPE& branch_data(Bid bid) {
+    return m_branches_data[bid.id];
+  }
+
   ELEMTYPE &rect_min_ref(Rid rid, int dim) {
-    // return rects_min.at(rect.id * dims + dim);
     return m_rects_min[rid.id * m_dims + dim];
   }
   ELEMTYPE &rect_max_ref(Rid rid, int dim) {
-    // return rects_max.at(rect.id * dims + dim);
     return m_rects_max[rid.id * m_dims + dim];
   }
+  ELEMTYPE *rect_min(Rid id) { return m_rects_min.data() + id.id * m_dims; }
+  ELEMTYPE *rect_max(Rid id) { return m_rects_max.data() + id.id * m_dims; }
 
   // logic
 
@@ -147,16 +152,19 @@ class drtree3 {
   void node_cover(Rid dst, Nid nid);
   void combine_rects(Rid dst, Rid a, Rid b);
   void copy_rect(Rid src, Rid dst);
+  bool Overlap(Rid, Rid);
   ELEMTYPE RectSphericalVolume(Rid);
   ELEMTYPE RectVolume(Rid);
   ELEMTYPE CalcRectVolume(Rid);
+  bool Search(Nid, Rid, int &found_count, Callback);
 
 public:
   drtree3(int dims)
       : m_partition_vars(MAXNODES + 1), m_insert_branch{make_branch_id()},
         m_insert_rect_rec_branch{make_branch_id()},
         m_insert_rect_branch{make_branch_id()}, m_remove_rect{make_rect_id()},
-        m_pick_branch_rect{make_rect_id()} {
+        m_pick_branch_rect{make_rect_id()},
+        m_search_rect{make_rect_id()}{
     m_dims = dims;
     m_root_id = make_node_id();
     for (int i = 0; i < MAXNODES + 1; i++) {
@@ -181,6 +189,9 @@ public:
   void push(const ELEMTYPE *a_min, const ELEMTYPE *a_max,
             const DATATYPE &a_dataId);
   size_t size() { return m_size; }
+
+  int search(VEC low, VEC high, Callback cb);
+  std::vector<std::reference_wrapper<const DATATYPE>> search(VEC low, VEC high);
 };
 
 #include "./drtree3_impl.hpp"

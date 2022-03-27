@@ -429,12 +429,8 @@ TEST_CASE("drtree3 init", "[drtree3]") {
   drtree3<Point> tree = grid_to_drtree3(grid);
   REQUIRE(tree.size() == 4);
 
-  // drtree3<Point> tree{2};
-  // double low[2] = {0, 0};
-  // double high[2] = {0, 0};
-  // Point p = {0, 0};
-  // tree.push(low, high, p);
-    
+  auto found = tree.search({1,1}, {1,2});
+  REQUIRE(found.size() == 1);
 }
 
 
