@@ -280,3 +280,135 @@ int main() {
 * <2022-03-23 Wed> drtree2: trying the idea of handles vs pointers
   - <2022-03-23 Wed> MVP of having Rect being a handle, storing ALL rects in one std::vector
     the idea is that copy ctor for the rtree will be much faster
+* rtree resources
+  - https://www.cse.cuhk.edu.hk/~taoyf/course/infs4205/lec/rtree.pdf
+  - https://livebook.manning.com/concept/algorithms/r-tree
+  - http://www.mathcs.emory.edu/~cheung/Courses/554/Syllabus/3-index/R-tree.html
+* terminology
+  - a node has N branches (N=MAXNODES)
+    - storing m_count for how many branches it stores
+  - a branch is:
+    - rect
+    - data
+    - Node* child
+  - level 0 is for leafs? root has level > 0
+    hmm I think level should be called =height= in this library
+
+
+** insertion
+   Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max, const DATATYPE &a_dataId)
+   - Initializes a branch
+   - calls InsertRect
+
+   InsertRect(const Branch &a_branch, Node **a_root, a_level): called with 0 level
+   inserts a rectangle into the data structure
+   - InsertRectRec(const Branch &a_branch, Node **a_root, a_level
+     (recursive)
+     #+begin_src cpp
+  if (InsertRectRec(a_branch, *a_root, &newNode, a_level)) // Root split
+  {
+    // Grow tree taller and new root
+    Node *newRoot = AllocNode();
+    newRoot->m_level = (*a_root)->m_level + 1;
+
+    Branch branch;
+     #+end_src
+     returns true ifnode was split. if not, fine!, nothing extra to do
+
+
+   InsertRectRec
+   #+begin_src cpp
+  // recurse until we reach the correct level for the new record. data records
+  // will always be called with a_level == 0 (leaf)
+  if (a_node->m_level > a_level) {
+    // Still above level for insertion, go down tree recursively
+    Node *otherNode;
+
+    // find the optimal branch for this record
+    int index = PickBranch(&a_branch.m_rect, a_node);
+
+
+   #+end_src
+
+   
+*** TODO InsertRect: do not get argument Node**
+    - return =std::optional<nid>= 
+** pick branch
+   #+begin_src cpp
+// Pick a branch.  Pick the one that will need the smallest increase
+// in area to accomodate the new rectangle.  This will result in the
+// least total area for the covering rectangles in the current node.
+// In case of a tie, pick the one which was smaller before, to get
+// the best resolution when searching.
+RTREE_TEMPLATE
+int RTREE_QUAL::PickBranch(const Rect *a_rect, Node *a_node) {
+
+   #+end_src
+** addbranch
+   #+begin_src cpp
+RTREE_TEMPLATE
+bool RTREE_QUAL::AddBranch(const Branch *a_branch, Node *a_node,
+                           Node **a_newNode) {
+  ASSERT(a_branch);
+  ASSERT(a_node);
+
+  if (a_node->m_count < MAXNODES) // Split won't be necessary
+  {
+    a_node->m_branch[a_node->m_count] = *a_branch;
+    ++a_node->m_count;
+
+    return false;
+  } else {
+    ASSERT(a_newNode);
+
+    SplitNode(a_node, a_branch, a_newNode);
+    return true;
+  }
+}
+   #+end_src
+
+
+** TODO splitnote
+   #+begin_src cpp
+// Split a node.
+// Divides the nodes branches and the extra one between two nodes.
+// Old node is one of the new ones, and one really new one is created.
+// Tries more than one method for choosing a partition, uses best result.
+RTREE_TEMPLATE
+void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
+                           Node **a_newNode) {
+  ASSERT(a_node);
+  ASSERT(a_branch);
+
+  // Could just use local here, but member or external is faster since it is
+  // reused
+  PartitionVars localVars;
+  PartitionVars *parVars = &localVars;
+
+  // Load all the branches into a buffer, initialize old node
+  GetBranches(a_node, a_branch, parVars);
+
+  // Find partition
+  ChoosePartition(parVars, MINNODES);
+
+  // Create a new node to hold (about) half of the branches
+  *a_newNode = AllocNode();
+  (*a_newNode)->m_level = a_node->m_level;
+
+  // Put branches from buffer into 2 nodes according to the chosen partition
+  a_node->m_count = 0;
+  LoadNodes(a_node, *a_newNode, parVars);
+
+  ASSERT((a_node->m_count + (*a_newNode)->m_count) == parVars->m_total);
+}
+   #+end_src
+
+** node
+   #+begin_src cpp
+  struct Node {
+    bool IsInternalNode() {
+      return (m_level > 0);
+    }                                        // Not a leaf, but a internal node
+    bool IsLeaf() { return (m_level == 0); } // A leaf, contains data
+
+   #+end_src

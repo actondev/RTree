@@ -1,5 +1,6 @@
 #include <drtree/drtree.hpp>
 #include <drtree/drtree2.hpp>
+#include <drtree/drtree3.hpp>
 #include <array>
 #include <catch2/catch.hpp>
 #include <chrono> // for high_resolution_clock
@@ -77,6 +78,15 @@ drtree2<Point> grid_to_drtree2(const Grid &grid) {
   for (auto &el : grid.points) {
     const double *pos = &el[0];
     tree.Insert(pos, pos, el);
+  }
+  return tree;
+}
+
+drtree3<Point> grid_to_drtree3(const Grid &grid) {
+  drtree3<Point> tree(grid.dims);
+  for (auto &el : grid.points) {
+    const double *pos = &el[0];
+    tree.push(pos, pos, el);
   }
   return tree;
 }
@@ -412,6 +422,19 @@ TEST_CASE("allocations template", "[.temp]") {
   RTree<Point, double, 2> tree = grid_to_rtree_template<2>(grid);
   auto t2 = high_resolution_clock::now();
   cout << "init templ took " << duration_ms(t2 - t1) << "ms" << endl;
+}
+
+TEST_CASE("drtree3 init", "[drtree3]") {
+  auto grid = make_grid(2, 2);
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == 4);
+
+  // drtree3<Point> tree{2};
+  // double low[2] = {0, 0};
+  // double high[2] = {0, 0};
+  // Point p = {0, 0};
+  // tree.push(low, high, p);
+    
 }
 
 
