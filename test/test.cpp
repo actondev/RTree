@@ -405,22 +405,50 @@ TEST_CASE("200x2d drtree2", "[benchmark][drtree2]") {
 }
 
 TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
-  auto grid = make_grid(4); // TODO crashes with 3 (works with 2)
+  auto grid = make_grid(200); // TODO crashes with 3 (works with 2)
   auto t1 = high_resolution_clock::now();
   drtree3<Point> tree = grid_to_drtree3(grid);
   auto t2 = high_resolution_clock::now();
   WARN("init took " << duration_ms(t2 - t1) << "ms");
   // REQUIRE(tree.size() == 40000);
-  std::vector<Point> expected = {{1,1}, {1,2}};
-  // TODO make_grid(4): found size 1?
-  auto found = tree.search({1,1}, {1,2});
+
+  std::vector<Point> expected = {
+    { 5.0, 2.0 },
+    { 5.0, 3.0 },
+    { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  // TODO results not correct (for high {6, 4})
+  auto found = tree.search({5,2}, {6,4});
   // REQUIRE(found.size() == 2);
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
-  t1 = now();
+  // t1 = now();
   // drtree3<Point>tree2 = tree;
-  t2 = now();
+  // t2 = now();
   // WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+}
+
+TEST_CASE("drtree3 test", "[drtree3]") {
+  auto grid = make_grid(9);
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  // std::vector<Point> expected = {
+  //   {1,1}, {1,2}, {1,3},
+  //   {2,1}, {2,2}, {2,3}
+  // };
+  // auto found = tree.search({1,1}, {2,3});
+  std::vector<Point> expected = {
+    // { 5.0, 2.0 },
+    // { 5.0, 3.0 },
+    // { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  auto found = tree.search({6,2}, {6,4});
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
 

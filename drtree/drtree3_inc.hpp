@@ -9,6 +9,7 @@
 #include <vector>
 #include <assert.h>
 #include "./drtree3_template.hpp"
+#include <easyprint.hpp>
 
 typedef uint32_t id_t;
 struct Id {

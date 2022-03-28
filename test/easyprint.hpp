@@ -1,5 +1,7 @@
 // from https://github.com/hebaishi/easy-cpp-print
 // https://github.com/hebaishi/easy-cpp-print/blob/0e24a7f493dbfae40045c4bb642c4e3f9e76b9a3/include/easyprint.hpp
+#pragma once
+
 #include <iostream>
 #include <sstream>
 #include <tuple>

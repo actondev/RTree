@@ -3,6 +3,8 @@
 
 #define ASSERT assert
 
+#define pp(x) easyprint::stringify(x)
+
 template <class ELEMTYPE> struct TPartitionVars {
   enum { NOT_TAKEN = -1 }; // indicates that position
 
@@ -211,3 +213,5 @@ public:
 };
 
 #include "./drtree3_impl.hpp"
+
+#undef pp

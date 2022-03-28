@@ -53,6 +53,7 @@ bool QUAL::Search(Nid nid, Rid rid, int &found_count,
       Branch& branch = get_branch(nbid);
       if (Overlap(rid, branch.rect_id)) {
         const DATATYPE &data = branch_data(nbid);
+        // cout << "search res: bid " << nbid << " data " << pp(data) << endl;
         ++found_count;
 
         if (!callback(data, rect_min(branch.rect_id), rect_max(branch.rect_id))) {
@@ -79,6 +80,7 @@ void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
   Bid bid = make_branch_id();
   set_branch_data(bid, data);
   Branch& branch = get_branch(bid);
+  // cout << "Insert: bid id " << bid.id << " has data " << pp(data) << endl;
   
   for (unsigned int axis = 0; axis < m_dims; ++axis) {
     rect_min_ref(branch.rect_id, axis) = low[axis];
@@ -227,12 +229,10 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
   Node &node = get_node(nid);
   if (node.count < MAXNODES) // Split won't be necessary
   {
-    Branch& node_branch = get_branch(node.get_branch(node.count));
-    Branch& branch = get_branch(bid);
-    node_branch = branch; // copy assignment (rect & child?)
-    // a_node->m_branch[a_node->m_count] = *a_branch;
+    // TODO should addbranch perhaps just return a bid? (which branch was chosen)
+    Bid node_insert_bid = node.get_branch(node.count);
+    copy_branch(bid, node_insert_bid);
     ++node.count;
-
     return false;
   } else {
     SplitNode(nid, bid, new_nid);
@@ -486,7 +486,6 @@ void QUAL::copy_branch(Bid src, Bid dst) {
   dst_branch.child = src_branch.child;
   // dst.m_data = src.m_data;
   set_branch_data(dst, branch_data(src));
- 
 }
 
 DRTREE_TEMPLATE

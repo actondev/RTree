@@ -412,3 +412,12 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
     bool IsLeaf() { return (m_level == 0); } // A leaf, contains data
 
    #+end_src
+
+   
+* other rtree libraries
+  - https://mdds.readthedocs.io/en/latest/rtree.html#bulk-loading-data
+  - boost
+* <2022-03-28 Mon> debugging handles version
+** size 4 inserting
+   - 0,0 :20
+   - 
