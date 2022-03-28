@@ -44,6 +44,7 @@ template <class DATATYPE, class ELEMTYPE = double> class drtree3 {
 private:
   const int MAXNODES = 8;
   const int MINNODES = MAXNODES / 2;
+  unsigned int m_dims; // set by the constructor
   std::vector<ELEMTYPE> m_rects_min;
   std::vector<ELEMTYPE> m_rects_max;
 
@@ -69,11 +70,9 @@ private:
   Rid m_choose_partition_rect0;
   Rid m_choose_partition_rect1;
 
-  unsigned int m_dims; // set by the constructor
   size_t m_size = 0;
 
   drtree3() = delete;
-  drtree3(unsigned int dims) : m_dims{dims} {}
 
   Rid make_rect_id() {
     Rid res{m_rects_count++};
@@ -169,8 +168,9 @@ private:
   bool Search(Nid, Rid, int &found_count, Callback);
 
 public:
-  drtree3(int dims)
-      : m_partition_vars(MAXNODES + 1),    //
+  drtree3(unsigned int dims)
+      : m_dims{dims},
+        m_partition_vars(MAXNODES + 1),    //
         m_insert_branch{make_branch_id()}, //
         m_insert_rect_rec_branch{make_branch_id()},
         m_insert_rect_branch{make_branch_id()}, //
@@ -181,7 +181,6 @@ public:
         m_choose_partition_rect0{make_rect_id()},
         m_choose_partition_rect1{make_rect_id()}
   {
-    m_dims = dims;
     m_root_id = make_node_id();
     for (int i = 0; i < MAXNODES + 1; i++) {
       m_partition_vars.m_branchBuf[i] = make_branch_id();

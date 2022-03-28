@@ -17,14 +17,15 @@ meson test -C build -v
   #+end_src
 * valgrind (profiling, memory leaks etc)
   #+begin_src sh
-valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d drtree"
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d rtree"
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d drtree3"
   #+end_src
 ** callgrind (performance)
    #+begin_src sh
 valgrind --tool=callgrind ./build/test/run-tests "200x2d rtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree2"
+valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree3"
    #+end_src
 ** massif (memory allocations)
    massif-visualizer tool
