@@ -482,7 +482,12 @@ void QUAL::node_cover(Rid dst, Nid nid) {
 
 DRTREE_TEMPLATE
 void QUAL::copy_rect(Rid src, Rid dst) {
-  for (auto i = 0; i < m_dims; i++) {
+  // callgrind says std::copy is slower?
+  // const ELEMTYPE* min_src = rect_min(src);
+  // const ELEMTYPE* max_src = rect_max(src);
+  // std::copy(min_src, min_src+m_dims, rect_min(dst));
+  // std::copy(max_src, max_src+m_dims, rect_max(dst));
+  for (auto i = 0; i < m_dims; ++i) {
     rect_min_ref(dst, i) = rect_min_ref(src, i);
     rect_max_ref(dst, i) = rect_max_ref(src, i);
   }
@@ -496,6 +501,7 @@ void QUAL::copy_branch(Bid src, Bid dst) {
   dst_branch.child = src_branch.child;
   // dst.m_data = src.m_data;
   // cout << "copy branch: " << src << "->" << dst << ": " << pp(branch_data(src)) << endl;
+  // TODO use Did (data id)
   set_branch_data(dst, branch_data(src));
 }
 

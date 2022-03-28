@@ -49,10 +49,14 @@ struct Bid : Id {
   }
 };
 
+// Data id
+struct Did : Id {};
+
 struct Branch {
   // Bid id;
   Rid rect_id;
   Nid child;
+  Did data_id; // TODO use data_id
 
   // Branch(): Branch(Id::nullid) {};
   // Branch(Bid id): id{id} {};
