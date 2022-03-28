@@ -150,11 +150,16 @@ private:
   void SplitNode(Nid, Bid, Nid& new_nid);
   void ChoosePartition(PartitionVars&, int min_fill);
   void InitParVars(PartitionVars&, int a_maxRects, int a_minFill);
+  void PickSeeds(PartitionVars& a_parVars);
+  void Classify(int a_index, int a_group, PartitionVars&);
+  void GetBranches(Nid, Bid, PartitionVars&);
+  void LoadNodes(Nid a, Nid b, PartitionVars&);
 
   int PickBranch(Rid rid, Nid nid);
   void node_cover(Rid dst, Nid nid);
   void combine_rects(Rid dst, Rid a, Rid b);
-  void copy_rect(Rid src, Rid dst);
+  void copy_rect(Rid dst, Rid src);
+  void copy_branch(Bid dst, Bid src);
   bool Overlap(Rid, Rid);
   ELEMTYPE RectSphericalVolume(Rid);
   ELEMTYPE RectVolume(Rid);
@@ -171,8 +176,8 @@ public:
         m_search_rect{make_rect_id()},           //
         m_pick_branch_rect{make_rect_id()},     //
         m_pick_seeds_rect{make_rect_id()},
-        m_choose_partition_rect0{make_rect_id()}
-        // m_choose_partition_rect1{make_rect_id()}
+        m_choose_partition_rect0{make_rect_id()},
+        m_choose_partition_rect1{make_rect_id()}
   {
     m_dims = dims;
     m_root_id = make_node_id();
@@ -181,6 +186,7 @@ public:
     }
     m_partition_vars.m_cover[0] = make_rect_id();
     m_partition_vars.m_cover[1] = make_rect_id();
+    m_partition_vars.m_coverSplit = make_rect_id();
 
     // Precomputed volumes of the unit spheres for the first few dimensions
     const float UNIT_SPHERE_VOLUMES[] = {

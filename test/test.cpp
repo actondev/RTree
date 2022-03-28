@@ -404,6 +404,19 @@ TEST_CASE("200x2d drtree2", "[benchmark][drtree2]") {
   // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
+TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
+  auto grid = make_grid(200); // TODO crashes with 3 (works with 2)
+  auto t1 = high_resolution_clock::now();
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  auto t2 = high_resolution_clock::now();
+  WARN("init took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == 40000);
+
+  auto found = tree.search({1,1}, {1,2});
+  REQUIRE(found.size() == 2);
+}
+
+
 TEST_CASE("allocations", "[.temp]") {
   auto grid = make_grid(2, 2);
   // cout << pp(grid.points) << endl;
@@ -423,16 +436,6 @@ TEST_CASE("allocations template", "[.temp]") {
   auto t2 = high_resolution_clock::now();
   cout << "init templ took " << duration_ms(t2 - t1) << "ms" << endl;
 }
-
-TEST_CASE("drtree3 init", "[drtree3]") {
-  auto grid = make_grid(3); // TODO crashes with 3 (works with 2)
-  drtree3<Point> tree = grid_to_drtree3(grid);
-  REQUIRE(tree.size() == 4);
-
-  auto found = tree.search({1,1}, {1,2});
-  REQUIRE(found.size() == 1);
-}
-
 
 TEST_CASE("drtree2 init", "[drtree2]") {
   auto grid = make_grid(10, 2);

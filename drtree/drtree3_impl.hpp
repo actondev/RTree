@@ -178,30 +178,31 @@ bool QUAL::InsertRectRec(Bid bid, Nid nid,
   // will always be called with a_level == 0 (leaf)
   Node& node = get_node(nid);
   Branch& branch = get_branch(bid);
+  Rid rid = branch.rect_id;
   if (node.level > level) {
     // Still above level for insertion, go down tree recursively
     // Node *otherNode;
     Nid other_nid;
 
     // find the optimal branch for this record
-    int index = PickBranch(branch.rect_id, nid);
+    int index = PickBranch(rid, nid);
     Bid node_bid = node.get_branch(index);
     Branch& node_branch = get_branch(node_bid);
-
+    Nid nb_child = node_branch.child;
+    Rid nb_rect = node_branch.rect_id;
     // recursively insert this record into the picked branch
-    bool childWasSplit = InsertRectRec(bid, node_branch.child, other_nid, level);
+    bool childWasSplit = InsertRectRec(bid, nb_child, other_nid, level);
 
     if (!childWasSplit) {
       // Child was not split. Merge the bounding box of the new record with the
       // existing bounding box
-      combine_rects(node_branch.rect_id, branch.rect_id,
-                    node_branch.rect_id);
+      combine_rects(nb_rect, rid, nb_rect);
       return false;
     } else {
       // Child was split. The old branches are now re-partitioned to two nodes
       // so we have to re-calculate the bounding boxes of each node
-      node_cover(node_branch.rect_id,
-                node_branch.child);
+
+      node_cover(nb_rect, nb_child);
 
       Branch& insert_rect_rec_branch = get_branch(m_insert_rect_rec_branch);
       insert_rect_rec_branch.child = other_nid;
@@ -234,9 +235,6 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
 
     return false;
   } else {
-    // ASSERT(a_newNode);
-
-    // TODO
     SplitNode(nid, bid, new_nid);
     return true;
   }
@@ -248,7 +246,7 @@ void QUAL::SplitNode(Nid nid, Bid bid, Nid &new_nid) {
   ASSERT(bid);
 
   // Load all the branches into a buffer, initialize old node
-  // GetBranches(a_node, a_branch, &m_split_parition_vars);
+  GetBranches(nid, bid, m_partition_vars);
 
   // Find partition
   ChoosePartition(m_partition_vars, MINNODES);
@@ -261,11 +259,33 @@ void QUAL::SplitNode(Nid nid, Bid bid, Nid &new_nid) {
 
   // Put branches from buffer into 2 nodes according to the chosen partition
   node.count = 0;
-  // LoadNodes(a_node, *a_newNode, &m_split_parition_vars);
+  LoadNodes(nid, new_nid, m_partition_vars);
 
   ASSERT((node.count + new_node.count) ==
          m_partition_vars.m_total);
 }
+
+DRTREE_TEMPLATE
+void QUAL::LoadNodes(Nid a, Nid b,
+                            PartitionVars &a_parVars) {
+  ASSERT(a);
+  ASSERT(b);
+
+  for (int index = 0; index < a_parVars.m_total; ++index) {
+    ASSERT(a_parVars.m_partition[index] == 0 ||
+           a_parVars.m_partition[index] == 1);
+
+    int targetNodeIndex = a_parVars.m_partition[index];
+    Nid targetNodes[2] = {a, b};
+
+    // It is assured that AddBranch here will not cause a node split.
+    Nid nullnid;
+    bool nodeWasSplit = AddBranch(a_parVars.m_branchBuf[index],
+                                  targetNodes[targetNodeIndex], nullnid);
+    ASSERT(!nodeWasSplit);
+  }
+}
+
 
 DRTREE_TEMPLATE
 void QUAL::ChoosePartition(PartitionVars& a_parVars, int a_minFill) {
@@ -284,7 +304,6 @@ void QUAL::ChoosePartition(PartitionVars& a_parVars, int a_minFill) {
     for (int index = 0; index < a_parVars.m_total; ++index, ++bid) {
       Branch& branch = get_branch(bid);
       if (PartitionVars::NOT_TAKEN == a_parVars.m_partition[index]) {
-        // Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
         Rid cur_rect = branch.rect_id;
         combine_rects(m_choose_partition_rect0, cur_rect,
                       a_parVars.m_cover[0]);
@@ -337,6 +356,94 @@ void QUAL::ChoosePartition(PartitionVars& a_parVars, int a_minFill) {
 }
 
 DRTREE_TEMPLATE
+void QUAL::PickSeeds(PartitionVars& a_parVars) {
+  int seed0 = 0, seed1 = 0;
+  ELEMTYPE worst, waste;
+  ELEMTYPE area[MAXNODES + 1];
+
+  for (int index = 0; index < a_parVars.m_total; ++index) {
+    Branch& branch = get_branch(a_parVars.m_branchBuf[index] + index);
+    area[index] = CalcRectVolume(branch.rect_id);
+  }
+
+  worst = -a_parVars.m_coverSplitArea - 1;
+
+  for (int indexA = 0; indexA < a_parVars.m_total - 1; ++indexA) {
+    for (int indexB = indexA + 1; indexB < a_parVars.m_total; ++indexB) {
+      Branch& branch_a = get_branch(a_parVars.m_branchBuf[indexA] + indexA);
+      Branch& branch_b = get_branch(a_parVars.m_branchBuf[indexB] + indexB);
+      combine_rects(m_pick_seeds_rect, branch_a.rect_id,
+                    branch_b.rect_id);
+      waste = CalcRectVolume(m_pick_seeds_rect) - area[indexA] - area[indexB];
+      if (waste > worst) {
+        worst = waste;
+        seed0 = indexA;
+        seed1 = indexB;
+      }
+    }
+  }
+
+  Classify(seed0, 0, a_parVars);
+  Classify(seed1, 1, a_parVars);
+}
+
+DRTREE_TEMPLATE
+void QUAL::Classify(int a_index, int a_group, PartitionVars& a_parVars) {
+  ASSERT(PartitionVars::NOT_TAKEN == a_parVars.m_partition[a_index]);
+
+  a_parVars.m_partition[a_index] = a_group;
+  Branch& branch = get_branch(a_parVars.m_branchBuf[a_index] + a_index);
+
+  // Calculate combined rect
+  if (a_parVars.m_count[a_group] == 0) {
+    // a_parVars.m_cover[a_group] = a_parVars.m_branchBuf[a_index].m_rect;
+    copy_rect(branch.rect_id,
+              a_parVars.m_cover[a_group]);
+  } else {
+    combine_rects(a_parVars.m_cover[a_group], a_parVars.m_cover[a_group],
+                  branch.rect_id);
+  }
+
+  // Calculate volume of combined rect
+  a_parVars.m_area[a_group] = CalcRectVolume(a_parVars.m_cover[a_group]);
+
+  ++a_parVars.m_count[a_group];
+}
+
+DRTREE_TEMPLATE
+void QUAL::GetBranches(Nid nid, Bid bid, PartitionVars &a_parVars) {
+  ASSERT(nid);
+  ASSERT(bid);
+
+  Node& node = get_node(nid);
+  ASSERT(node.count == MAXNODES);
+
+  // Load the branch buffer
+  // Bid nbid = node.get_branch(0);
+  for (int index = 0; index < MAXNODES; ++index) {
+    // Branch& node_branch = get_branch(nbid);
+    // a_parVars.m_branchBuf[index] = a_node.m_branch[index];
+    copy_branch(node.get_branch(index), a_parVars.m_branchBuf[index]);
+  }
+  // a_parVars.m_branchBuf[MAXNODES] = *a_branch;
+  copy_branch(bid, a_parVars.m_branchBuf[MAXNODES]);
+  a_parVars.m_branchCount = MAXNODES + 1;
+
+  // Calculate rect containing all in the set
+  // Note: without implementing Rect copy assignment,
+  // when modifying m_coverSplit, it would also modify m_branchBuf[0].m_rect
+  // a_parVars.m_coverSplit = a_parVars.m_branchBuf[0].m_rect;
+  copy_rect(get_branch(a_parVars.m_branchBuf[0]).rect_id, a_parVars.m_coverSplit);
+  for (int index = 1; index < MAXNODES + 1; ++index) {
+    combine_rects(a_parVars.m_coverSplit, a_parVars.m_coverSplit,
+                  get_branch(a_parVars.m_branchBuf[index]).rect_id);
+  }
+  a_parVars.m_coverSplitArea = CalcRectVolume(a_parVars.m_coverSplit);
+}
+
+
+
+DRTREE_TEMPLATE
 void QUAL::InitParVars(PartitionVars& a_parVars, int a_maxRects,
                               int a_minFill) {
   a_parVars.m_count[0] = a_parVars.m_count[1] = 0;
@@ -351,7 +458,6 @@ void QUAL::InitParVars(PartitionVars& a_parVars, int a_maxRects,
 DRTREE_TEMPLATE
 void QUAL::node_cover(Rid dst, Nid nid) {
   ASSERT(nid);
-  // *dst = a_node->m_branch[0].m_rect;
   Node& node = get_node(nid);
   Bid bid0 = node.get_branch(0);
   Branch& branch0 = get_branch(bid0);
@@ -370,6 +476,17 @@ void QUAL::copy_rect(Rid src, Rid dst) {
     rect_min_ref(dst, i) = rect_min_ref(src, i);
     rect_max_ref(dst, i) = rect_max_ref(src, i);
   }
+}
+
+DRTREE_TEMPLATE
+void QUAL::copy_branch(Bid src, Bid dst) {
+  Branch& src_branch = get_branch(src);
+  Branch& dst_branch = get_branch(dst);
+  copy_rect(src_branch.rect_id, dst_branch.rect_id);
+  dst_branch.child = src_branch.child;
+  // dst.m_data = src.m_data;
+  set_branch_data(dst, branch_data(src));
+ 
 }
 
 DRTREE_TEMPLATE
