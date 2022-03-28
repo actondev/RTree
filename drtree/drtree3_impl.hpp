@@ -13,6 +13,16 @@ std::vector<DATATYPE> QUAL::search(VEC low, VEC high) {
 }
 
 DRTREE_TEMPLATE
+void QUAL::search(VEC low, VEC high, std::vector<DATATYPE>& found) {
+  found.clear();
+  Callback cb = [&](const DATATYPE& data, const double *low, const double *high) {
+    found.push_back(data);
+    return true;
+  };
+  search(low, high, cb);
+}
+
+DRTREE_TEMPLATE
 int QUAL::search(VEC low, VEC high, Callback callback) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
@@ -77,10 +87,10 @@ void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
 #endif //_DEBUG
 
   // this can be reused (m_insert_branch)
-  Bid bid = make_branch_id();
+  Bid bid = m_insert_branch;
   set_branch_data(bid, data);
   Branch& branch = get_branch(bid);
-  // cout << "Insert: bid id " << bid.id << " has data " << pp(data) << endl;
+  // cout << "Insert: bid id " << bid << " has data " << pp(data) << endl;
   
   for (unsigned int axis = 0; axis < m_dims; ++axis) {
     rect_min_ref(branch.rect_id, axis) = low[axis];
@@ -231,6 +241,7 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
   {
     // TODO should addbranch perhaps just return a bid? (which branch was chosen)
     Bid node_insert_bid = node.get_branch(node.count);
+    // cout << "add branch copying: " << bid << " => node" << nid << "branch#" << node.count << " bid " << node_insert_bid << endl;
     copy_branch(bid, node_insert_bid);
     ++node.count;
     return false;
@@ -362,7 +373,7 @@ void QUAL::PickSeeds(PartitionVars& a_parVars) {
   ELEMTYPE area[MAXNODES + 1];
 
   for (int index = 0; index < a_parVars.m_total; ++index) {
-    Branch& branch = get_branch(a_parVars.m_branchBuf[index] + index);
+    Branch& branch = get_branch(a_parVars.m_branchBuf[index]);
     area[index] = CalcRectVolume(branch.rect_id);
   }
 
@@ -370,8 +381,8 @@ void QUAL::PickSeeds(PartitionVars& a_parVars) {
 
   for (int indexA = 0; indexA < a_parVars.m_total - 1; ++indexA) {
     for (int indexB = indexA + 1; indexB < a_parVars.m_total; ++indexB) {
-      Branch& branch_a = get_branch(a_parVars.m_branchBuf[indexA] + indexA);
-      Branch& branch_b = get_branch(a_parVars.m_branchBuf[indexB] + indexB);
+      Branch& branch_a = get_branch(a_parVars.m_branchBuf[indexA]);
+      Branch& branch_b = get_branch(a_parVars.m_branchBuf[indexB]);
       combine_rects(m_pick_seeds_rect, branch_a.rect_id,
                     branch_b.rect_id);
       waste = CalcRectVolume(m_pick_seeds_rect) - area[indexA] - area[indexB];
@@ -392,8 +403,7 @@ void QUAL::Classify(int a_index, int a_group, PartitionVars& a_parVars) {
   ASSERT(PartitionVars::NOT_TAKEN == a_parVars.m_partition[a_index]);
 
   a_parVars.m_partition[a_index] = a_group;
-  Branch& branch = get_branch(a_parVars.m_branchBuf[a_index] + a_index);
-
+  Branch& branch = get_branch(a_parVars.m_branchBuf[a_index]);
   // Calculate combined rect
   if (a_parVars.m_count[a_group] == 0) {
     // a_parVars.m_cover[a_group] = a_parVars.m_branchBuf[a_index].m_rect;
@@ -485,6 +495,7 @@ void QUAL::copy_branch(Bid src, Bid dst) {
   copy_rect(src_branch.rect_id, dst_branch.rect_id);
   dst_branch.child = src_branch.child;
   // dst.m_data = src.m_data;
+  // cout << "copy branch: " << src << "->" << dst << ": " << pp(branch_data(src)) << endl;
   set_branch_data(dst, branch_data(src));
 }
 
@@ -502,7 +513,15 @@ void QUAL::combine_rects(Rid dst, Rid a, Rid b) {
 // Calculate the n-dimensional volume of a rectangle
 DRTREE_TEMPLATE
 ELEMTYPE QUAL::RectVolume(Rid rid) {
-  return 0;
+  ELEMTYPE volume = (ELEMTYPE)1;
+
+  for (int index = 0; index < m_dims; ++index) {
+    volume *= rect_max_ref(rid, index) - rect_min_ref(rid, index);
+  }
+
+  ASSERT(volume >= (ELEMTYPE)0);
+
+  return volume;
 }
 
 // The exact volume of the bounding sphere for the given Rect
@@ -512,7 +531,7 @@ ELEMTYPE QUAL::RectSphericalVolume(Rid rid) {
   ELEMTYPE radius;
   for (unsigned int index = 0; index < m_dims; ++index) {
     const ELEMTYPE halfExtent =
-        (rect_max_ref(rid, index) - rect_min_ref(rid, index)) *
+        ((ELEMTYPE)rect_max_ref(rid, index) - (ELEMTYPE)rect_min_ref(rid, index)) *
         (ELEMTYPE)0.5;
 
     sumOfSquares += halfExtent * halfExtent;
@@ -534,11 +553,8 @@ ELEMTYPE QUAL::RectSphericalVolume(Rid rid) {
 // Use one of the methods to calculate retangle volume
 DRTREE_TEMPLATE
 ELEMTYPE QUAL::CalcRectVolume(Rid rid) {
-#ifdef RTREE_USE_SPHERICAL_VOLUME
-  return RectSphericalVolume(rid); // Slower but helps certain merge cases
-#else                                 // RTREE_USE_SPHERICAL_VOLUME
-  return RectVolume(rid); // Faster but can cause poor merges
-#endif                                // RTREE_USE_SPHERICAL_VOLUME
+  // return RectSphericalVolume(rid);
+  return RectVolume(rid);
 }
 
 // Decide whether two rectangles overlap.

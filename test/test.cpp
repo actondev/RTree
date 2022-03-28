@@ -328,12 +328,12 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
     return true;
   };
   t1 = now();
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 10000; i++) {
     found.clear();
     tree.Search(low, high, cb);
   }
   t2 = now();
-  WARN("search x1000 took " << duration_ms(t2 - t1) << " ms ");
+  WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
   REQUIRE(found.size() == 6);
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -410,7 +410,7 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   drtree3<Point> tree = grid_to_drtree3(grid);
   auto t2 = high_resolution_clock::now();
   WARN("init took " << duration_ms(t2 - t1) << "ms");
-  // REQUIRE(tree.size() == 40000);
+  REQUIRE(tree.size() == 40000);
 
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -420,10 +420,17 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
     { 6.0, 3.0 },
     { 6.0, 4.0 },
   };
-  // TODO results not correct (for high {6, 4})
-  auto found = tree.search({5,2}, {6,4});
-  // REQUIRE(found.size() == 2);
+  std::vector<double> low = {5 , 2};
+  std::vector<double> high = {6 , 4};
+  auto found = tree.search(low, high);
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  t1 = now();
+  for (int i = 0; i < 10000; i++) {
+    tree.search(low, high, found);
+  }
+  t2 = now();
+  WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
 
   // t1 = now();
   // drtree3<Point>tree2 = tree;
@@ -434,19 +441,12 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
 TEST_CASE("drtree3 test", "[drtree3]") {
   auto grid = make_grid(9);
   drtree3<Point> tree = grid_to_drtree3(grid);
-  // std::vector<Point> expected = {
-  //   {1,1}, {1,2}, {1,3},
-  //   {2,1}, {2,2}, {2,3}
-  // };
-  // auto found = tree.search({1,1}, {2,3});
   std::vector<Point> expected = {
-    // { 5.0, 2.0 },
-    // { 5.0, 3.0 },
-    // { 5.0, 4.0 },
     { 6.0, 2.0 },
     { 6.0, 3.0 },
     { 6.0, 4.0 },
   };
+  // TODO not getting {6,3} (with spherical volume)
   auto found = tree.search({6,2}, {6,4});
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }

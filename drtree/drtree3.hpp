@@ -210,6 +210,7 @@ public:
 
   int search(VEC low, VEC high, Callback cb);
   std::vector<DATATYPE> search(VEC low, VEC high);
+  void search(VEC low, VEC high, std::vector<DATATYPE>& found);
 };
 
 #include "./drtree3_impl.hpp"

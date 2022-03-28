@@ -20,22 +20,49 @@ struct Id {
   operator bool() const {
     return id != nullid;
   }
-  Id operator+(const Id& other) const {
-    return Id{id + other.id};
-  };
-  Id operator+(const int &offset) const { return Id{id + offset}; };
-  Id& operator++() {
-    id++;
-    return *this;
-  }
+  // Id operator+(const Id& other) const {
+  //   return Id{id + other.id};
+  // };
+  // Id operator+(const int &offset) const { return Id{id + offset}; };
+  // Id& operator++() {
+  //   id++;
+  //   return *this;
+  // }
   Id(): Id(nullid){};
   Id(const Id& other): Id(other.id){};
   Id(id_t id): id{id} {}
 };
 
-typedef Id Nid;
-typedef Id Bid;
-typedef Id Rid;
+// typedef Id Nid;
+// typedef Id Bid;
+// typedef Id Rid;
+struct Rid : Id {};
+
+struct Nid : Id {};
+
+struct Bid : Id {
+  Bid operator+(const Bid &other) const { return Bid{id + other.id}; };
+  Bid operator+(const int &offset) const { return Bid{id + offset}; };
+  Bid &operator++() {
+    id++;
+    return *this;
+  }
+};
+
+struct Branch {
+  // Bid id;
+  Rid rect_id;
+  Nid child;
+
+  // Branch(): Branch(Id::nullid) {};
+  // Branch(Bid id): id{id} {};
+};
+
+
+std::ostream &operator<<(std::ostream &os, const Bid &bid) {
+  os << "Bid{" << bid.id << "}";
+  return os;
+}
 
 struct Node {
   bool is_internal() { return (level > 0); } // Not a leaf, but a internal node
@@ -47,13 +74,4 @@ struct Node {
   Bid get_branch(int idx) {
     return branch0 + idx;
   }
-};
-
-struct Branch {
-  // Bid id;
-  Rid rect_id;
-  Nid child;
-
-  // Branch(): Branch(Id::nullid) {};
-  // Branch(Bid id): id{id} {};
 };
