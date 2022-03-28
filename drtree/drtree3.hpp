@@ -207,7 +207,7 @@ public:
   size_t size() { return m_size; }
 
   int search(VEC low, VEC high, Callback cb);
-  std::vector<std::reference_wrapper<const DATATYPE>> search(VEC low, VEC high);
+  std::vector<DATATYPE> search(VEC low, VEC high);
 };
 
 #include "./drtree3_impl.hpp"

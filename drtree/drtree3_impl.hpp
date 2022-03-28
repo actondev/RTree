@@ -2,8 +2,8 @@
 #include "drtree/drtree3_template.hpp"
 
 DRTREE_TEMPLATE
-std::vector<std::reference_wrapper<const DATATYPE>> QUAL::search(VEC low, VEC high) {
-  std::vector<std::reference_wrapper<const DATATYPE>> found;
+std::vector<DATATYPE> QUAL::search(VEC low, VEC high) {
+  std::vector<DATATYPE> found;
     Callback cb = [&](const DATATYPE& data, const double *low, const double *high) {
       found.push_back(data);
     return true;
