@@ -124,7 +124,7 @@ int QUAL::PickBranch(Rid rid, Nid nid) {
 }
 
 DRTREE_TEMPLATE
-bool QUAL::InsertRect(Bid bid, Nid root_id, int level) {
+bool QUAL::InsertRect(Bid bid, Nid& root_id, int level) {
   ASSERT(root_id);
   Node& root = get_node(root_id);
   ASSERT(level >= 0 && level <= root.level);
@@ -146,19 +146,22 @@ bool QUAL::InsertRect(Bid bid, Nid root_id, int level) {
     Node &new_root = get_node(new_root_id);
     new_root.level = root.level + 1;
 
+    Nid falsy_nid; // TODO passing NULL to addbranch in original
+
     Branch &insert_rect_branch = get_branch(m_insert_rect_branch);
     // add old root node as a child of the new root
     node_cover(insert_rect_branch.rect_id, root_id);
     insert_rect_branch.child = root_id;
-    AddBranch(m_insert_rect_branch, new_root_id, Nid::nullid);
+    AddBranch(m_insert_rect_branch, new_root_id, falsy_nid);
 
     // add the split node as a child of the new root
     node_cover(insert_rect_branch.rect_id, new_node);
     insert_rect_branch.child = new_node;
-    AddBranch(m_insert_rect_branch, new_root_id, Nid::nullid);
+    AddBranch(m_insert_rect_branch, new_root_id, falsy_nid);
 
     // set the new root as the root node
     // *a_root = newRoot;
+    root_id = new_root_id;
   }
   // truthy if new_root_id = make_node_id();
   return new_root_id;
@@ -219,7 +222,7 @@ bool QUAL::InsertRectRec(Bid bid, Nid nid,
 }
 
 DRTREE_TEMPLATE
-bool QUAL::AddBranch(Bid bid, Nid nid, Nid new_node) {
+bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
   Node &node = get_node(nid);
   if (node.count < MAXNODES) // Split won't be necessary
   {
@@ -233,8 +236,115 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid new_node) {
   } else {
     // ASSERT(a_newNode);
 
-    // SplitNode(a_node, a_branch, a_newNode);
+    // TODO
+    SplitNode(nid, bid, new_nid);
     return true;
+  }
+}
+
+DRTREE_TEMPLATE
+void QUAL::SplitNode(Nid nid, Bid bid, Nid &new_nid) {
+  ASSERT(nid);
+  ASSERT(bid);
+
+  // Load all the branches into a buffer, initialize old node
+  // GetBranches(a_node, a_branch, &m_split_parition_vars);
+
+  // Find partition
+  ChoosePartition(m_partition_vars, MINNODES);
+
+  // Create a new node to hold (about) half of the branches
+  new_nid = make_node_id();
+  Node& new_node = get_node(new_nid);
+  Node& node = get_node(nid);
+  new_node.level = node.level;
+
+  // Put branches from buffer into 2 nodes according to the chosen partition
+  node.count = 0;
+  // LoadNodes(a_node, *a_newNode, &m_split_parition_vars);
+
+  ASSERT((node.count + new_node.count) ==
+         m_partition_vars.m_total);
+}
+
+DRTREE_TEMPLATE
+void QUAL::ChoosePartition(PartitionVars& a_parVars, int a_minFill) {
+  ELEMTYPE biggestDiff;
+  int group, chosen = 0, betterGroup = 0;
+
+  InitParVars(a_parVars, a_parVars.m_branchCount, a_minFill);
+  PickSeeds(a_parVars);
+
+  while (
+      ((a_parVars.m_count[0] + a_parVars.m_count[1]) < a_parVars.m_total) &&
+      (a_parVars.m_count[0] < (a_parVars.m_total - a_parVars.m_minFill)) &&
+      (a_parVars.m_count[1] < (a_parVars.m_total - a_parVars.m_minFill))) {
+    biggestDiff = (ELEMTYPE)-1;
+    Bid bid = a_parVars.m_branchBuf[0];
+    for (int index = 0; index < a_parVars.m_total; ++index, ++bid) {
+      Branch& branch = get_branch(bid);
+      if (PartitionVars::NOT_TAKEN == a_parVars.m_partition[index]) {
+        // Rect *curRect = &a_parVars->m_branchBuf[index].m_rect;
+        Rid cur_rect = branch.rect_id;
+        combine_rects(m_choose_partition_rect0, cur_rect,
+                      a_parVars.m_cover[0]);
+        combine_rects(m_choose_partition_rect1, cur_rect,
+                      a_parVars.m_cover[1]);
+
+        ELEMTYPE growth0 =
+            CalcRectVolume(m_choose_partition_rect0) - a_parVars.m_area[0];
+        ELEMTYPE growth1 =
+            CalcRectVolume(m_choose_partition_rect1) - a_parVars.m_area[1];
+        ELEMTYPE diff = growth1 - growth0;
+        if (diff >= 0) {
+          group = 0;
+        } else {
+          group = 1;
+          diff = -diff;
+        }
+
+        if (diff > biggestDiff) {
+          biggestDiff = diff;
+          chosen = index;
+          betterGroup = group;
+        } else if ((diff == biggestDiff) && (a_parVars.m_count[group] <
+                                             a_parVars.m_count[betterGroup])) {
+          chosen = index;
+          betterGroup = group;
+        }
+      }
+    }
+    Classify(chosen, betterGroup, a_parVars);
+  }
+
+  // If one group too full, put remaining rects in the other
+  if ((a_parVars.m_count[0] + a_parVars.m_count[1]) < a_parVars.m_total) {
+    if (a_parVars.m_count[0] >= a_parVars.m_total - a_parVars.m_minFill) {
+      group = 1;
+    } else {
+      group = 0;
+    }
+    for (int index = 0; index < a_parVars.m_total; ++index) {
+      if (PartitionVars::NOT_TAKEN == a_parVars.m_partition[index]) {
+        Classify(index, group, a_parVars);
+      }
+    }
+  }
+
+  ASSERT((a_parVars.m_count[0] + a_parVars.m_count[1]) == a_parVars.m_total);
+  ASSERT((a_parVars.m_count[0] >= a_parVars.m_minFill) &&
+         (a_parVars.m_count[1] >= a_parVars.m_minFill));
+}
+
+DRTREE_TEMPLATE
+void QUAL::InitParVars(PartitionVars& a_parVars, int a_maxRects,
+                              int a_minFill) {
+  a_parVars.m_count[0] = a_parVars.m_count[1] = 0;
+  a_parVars.m_area[0] = a_parVars.m_area[1] = (ELEMTYPE)0;
+  a_parVars.m_total = a_maxRects;
+  a_parVars.m_minFill = a_minFill;
+  for (int index = 0; index < a_maxRects; ++index) {
+    a_parVars.m_partition[index] = PartitionVars::NOT_TAKEN;
   }
 }
 

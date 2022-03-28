@@ -28,18 +28,13 @@ struct Id {
     return *this;
   }
   Id(): Id(nullid){};
+  Id(const Id& other): Id(other.id){};
   Id(id_t id): id{id} {}
 };
 
 typedef Id Nid;
 typedef Id Bid;
 typedef Id Rid;
-
-struct Rect {
-  // Rid id;
-  // Rect() : Rect(Id::nullid){};
-  // Rect(Rid id) : id{id} {};
-};
 
 struct Node {
   bool is_internal() { return (level > 0); } // Not a leaf, but a internal node

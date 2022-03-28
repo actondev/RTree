@@ -3,26 +3,25 @@
 
 #define ASSERT assert
 
-template <class ELEMTYPE>
-struct TPartitionVars {
+template <class ELEMTYPE> struct TPartitionVars {
   enum { NOT_TAKEN = -1 }; // indicates that position
 
-  int* m_partition; // [MAXNODES + 1];
+  int *m_partition; // [MAXNODES + 1];
   int m_total;
   int m_minFill;
   int m_count[2];
-  Rect m_cover[2];
+  Rid m_cover[2];
   ELEMTYPE m_area[2];
 
-  Branch* m_branchBuf; //[MAXNODES + 1];
+  Bid *m_branchBuf; //[MAXNODES + 1];
   int m_branchCount;
-  Rect m_coverSplit;
+  Rid m_coverSplit;
   ELEMTYPE m_coverSplitArea;
 
   TPartitionVars() = delete;
   TPartitionVars(size_t size) {
     m_partition = new int[size];
-    m_branchBuf = new Branch[size];
+    m_branchBuf = new Bid[size];
   }
   ~TPartitionVars() {
     delete[] m_partition;
@@ -30,20 +29,26 @@ struct TPartitionVars {
   }
 };
 
-template <class DATATYPE, class ELEMTYPE = double>
-class drtree3 {
+template <class DATATYPE, class ELEMTYPE = double> class drtree3 {
   static_assert(std::numeric_limits<ELEMTYPE>::is_iec559,
                 "'COORD_TYPE' accepts floating-point types only");
 
   typedef std::function<bool(const DATATYPE &, const ELEMTYPE *,
                              const ELEMTYPE *)>
-  Callback;
+      Callback;
   typedef TPartitionVars<ELEMTYPE> PartitionVars;
   typedef std::vector<ELEMTYPE> VEC;
 
 private:
   const int MAXNODES = 8;
-  const int MINNODES = MAXNODES/2;
+  const int MINNODES = MAXNODES / 2;
+  std::vector<ELEMTYPE> m_rects_min;
+  std::vector<ELEMTYPE> m_rects_max;
+
+  std::vector<Branch> m_branches;
+  std::vector<DATATYPE> m_branches_data;
+  std::vector<Node> m_nodes;
+
   ELEMTYPE m_unitSphereVolume;
 
   PartitionVars m_partition_vars;
@@ -55,18 +60,15 @@ private:
   Bid m_insert_rect_rec_branch;
   Bid m_insert_rect_branch;
   Rid m_remove_rect;
-  Rid m_pick_branch_rect;
   Rid m_search_rect;
+  //
+  Rid m_pick_branch_rect;
+  Rid m_pick_seeds_rect;
+  Rid m_choose_partition_rect0;
+  Rid m_choose_partition_rect1;
 
   unsigned int m_dims; // set by the constructor
   size_t m_size = 0;
-
-  std::vector<ELEMTYPE> m_rects_min;
-  std::vector<ELEMTYPE> m_rects_max;
-
-  std::vector<Branch> m_branches;
-  std::vector<DATATYPE> m_branches_data;
-  std::vector<Node> m_nodes;
 
   drtree3() = delete;
   drtree3(unsigned int dims) : m_dims{dims} {}
@@ -129,9 +131,7 @@ private:
     m_branches_data[bid.id] = data;
   }
 
-  const DATATYPE& branch_data(Bid bid) {
-    return m_branches_data[bid.id];
-  }
+  const DATATYPE &branch_data(Bid bid) { return m_branches_data[bid.id]; }
 
   ELEMTYPE &rect_min_ref(Rid rid, int dim) {
     return m_rects_min[rid.id * m_dims + dim];
@@ -144,9 +144,12 @@ private:
 
   // logic
 
-  bool InsertRect(Bid, Nid, int level);
+  bool InsertRect(Bid, Nid&, int level);
   bool InsertRectRec(Bid branch, Nid node, Nid &new_node, int level);
-  bool AddBranch(Bid, Nid node, Nid new_node);
+  bool AddBranch(Bid, Nid node, Nid& new_node);
+  void SplitNode(Nid, Bid, Nid& new_nid);
+  void ChoosePartition(PartitionVars&, int min_fill);
+  void InitParVars(PartitionVars&, int a_maxRects, int a_minFill);
 
   int PickBranch(Rid rid, Nid nid);
   void node_cover(Rid dst, Nid nid);
@@ -160,17 +163,24 @@ private:
 
 public:
   drtree3(int dims)
-      : m_partition_vars(MAXNODES + 1), m_insert_branch{make_branch_id()},
+      : m_partition_vars(MAXNODES + 1),    //
+        m_insert_branch{make_branch_id()}, //
         m_insert_rect_rec_branch{make_branch_id()},
-        m_insert_rect_branch{make_branch_id()}, m_remove_rect{make_rect_id()},
-        m_pick_branch_rect{make_rect_id()},
-        m_search_rect{make_rect_id()}{
+        m_insert_rect_branch{make_branch_id()}, //
+        m_remove_rect{make_rect_id()},          //
+        m_search_rect{make_rect_id()},           //
+        m_pick_branch_rect{make_rect_id()},     //
+        m_pick_seeds_rect{make_rect_id()},
+        m_choose_partition_rect0{make_rect_id()}
+        // m_choose_partition_rect1{make_rect_id()}
+  {
     m_dims = dims;
     m_root_id = make_node_id();
     for (int i = 0; i < MAXNODES + 1; i++) {
-      Branch &br = m_partition_vars.m_branchBuf[i];
-      br.rect_id = make_rect_id();
+      m_partition_vars.m_branchBuf[i] = make_branch_id();
     }
+    m_partition_vars.m_cover[0] = make_rect_id();
+    m_partition_vars.m_cover[1] = make_rect_id();
 
     // Precomputed volumes of the unit spheres for the first few dimensions
     const float UNIT_SPHERE_VOLUMES[] = {

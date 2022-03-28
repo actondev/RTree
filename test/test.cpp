@@ -425,7 +425,7 @@ TEST_CASE("allocations template", "[.temp]") {
 }
 
 TEST_CASE("drtree3 init", "[drtree3]") {
-  auto grid = make_grid(2, 2);
+  auto grid = make_grid(3); // TODO crashes with 3 (works with 2)
   drtree3<Point> tree = grid_to_drtree3(grid);
   REQUIRE(tree.size() == 4);
 
