@@ -88,8 +88,9 @@ void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
 
   // this can be reused (m_insert_branch)
   Bid bid = m_insert_branch;
-  set_branch_data(bid, data);
   Branch& branch = get_branch(bid);
+  Did did = store_data(data);
+  branch.data_id = did;
   // cout << "Insert: bid id " << bid << " has data " << pp(data) << endl;
   
   for (unsigned int axis = 0; axis < m_dims; ++axis) {
@@ -497,12 +498,10 @@ DRTREE_TEMPLATE
 void QUAL::copy_branch(Bid src, Bid dst) {
   Branch& src_branch = get_branch(src);
   Branch& dst_branch = get_branch(dst);
-  copy_rect(src_branch.rect_id, dst_branch.rect_id);
   dst_branch.child = src_branch.child;
-  // dst.m_data = src.m_data;
+  dst_branch.data_id = src_branch.data_id;
+  copy_rect(src_branch.rect_id, dst_branch.rect_id);
   // cout << "copy branch: " << src << "->" << dst << ": " << pp(branch_data(src)) << endl;
-  // TODO use Did (data id)
-  set_branch_data(dst, branch_data(src));
 }
 
 DRTREE_TEMPLATE

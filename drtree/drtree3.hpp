@@ -49,7 +49,8 @@ private:
   std::vector<ELEMTYPE> m_rects_max;
 
   std::vector<Branch> m_branches;
-  std::vector<DATATYPE> m_branches_data;
+  std::vector<DATATYPE> m_data_store;
+
   std::vector<Node> m_nodes;
 
   ELEMTYPE m_unitSphereVolume;
@@ -85,7 +86,6 @@ private:
   Bid make_branch_id() {
     Bid bid{m_branches_count++};
     m_branches.resize(m_branches_count);
-    m_branches_data.resize(m_branches_count);
     Branch &branch = m_branches[bid.id];
     branch.rect_id = make_rect_id();
 
@@ -128,11 +128,18 @@ private:
     return m_nodes[nid.id];
   }
 
-  void set_branch_data(Bid bid, const DATATYPE &data) {
-    m_branches_data[bid.id] = data;
+  Did store_data(const DATATYPE& data) {
+    m_data_store.push_back(data);
+    Did did{m_data_store.size() - 1};
+    return did;
   }
 
-  const DATATYPE &branch_data(Bid bid) { return m_branches_data[bid.id]; }
+  const DATATYPE &branch_data(Bid bid) {
+    Branch& br = get_branch(bid);
+    Did did = br.data_id;
+    ASSERT(did);
+    return m_data_store[did.id];
+  }
 
   ELEMTYPE &rect_min_ref(Rid rid, int dim) {
     return m_rects_min[rid.id * m_dims + dim];
