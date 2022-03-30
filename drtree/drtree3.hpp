@@ -135,10 +135,11 @@ private:
     return m_data_store[did.id];
   }
 
-  ELEMTYPE &rect_min_ref(Rid rid, int dim) {
+  // remember to have this inline, used a lot!
+  inline ELEMTYPE &rect_min_ref(Rid rid, int dim) {
     return m_rects_min[rid.id * m_dims + dim];
   }
-  ELEMTYPE &rect_max_ref(Rid rid, int dim) {
+  inline ELEMTYPE &rect_max_ref(Rid rid, int dim) {
     return m_rects_max[rid.id * m_dims + dim];
   }
   ELEMTYPE *rect_min(Rid id) { return m_rects_min.data() + id.id * m_dims; }
