@@ -310,14 +310,15 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
 TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
 #define MAXDIMS 2
   int dims = 2;
+  const int size = 200;
   
-  auto grid = make_grid(200, dims);
+  auto grid = make_grid(size, dims);
 
   auto t1 = now();
   RTree<Point, double, MAXDIMS> tree = grid_to_rtree_template<MAXDIMS>(grid);
   auto t2 = now();
   
-  WARN("init took " << duration_ms(t2 - t1) << "ms");
+  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
   // return;
 
   double low[2] = {5, 2};
@@ -405,12 +406,13 @@ TEST_CASE("200x2d drtree2", "[benchmark][drtree2]") {
 }
 
 TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
-  auto grid = make_grid(200); // TODO crashes with 3 (works with 2)
+  const int size = 200;
+  auto grid = make_grid(size); // TODO crashes with 3 (works with 2)
   auto t1 = high_resolution_clock::now();
   drtree3<Point> tree = grid_to_drtree3(grid);
   auto t2 = high_resolution_clock::now();
-  WARN("init took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.size() == 40000);
+  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == size*size);
 
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -432,10 +434,14 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   t2 = now();
   WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
 
-  // t1 = now();
-  // drtree3<Point>tree2 = tree;
-  // t2 = now();
-  // WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+  t1 = now();
+  drtree3<Point>tree2 = tree;
+  t2 = now();
+  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+
+  REQUIRE(tree2.size() == tree.size());
+  auto found2 = tree2.search(low, high);
+  REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
 }
 
 TEST_CASE("drtree3 test", "[drtree3]") {

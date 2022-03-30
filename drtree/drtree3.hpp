@@ -7,28 +7,24 @@
 
 template <class ELEMTYPE> struct TPartitionVars {
   enum { NOT_TAKEN = -1 }; // indicates that position
-
-  int *m_partition; // [MAXNODES + 1];
   int m_total;
   int m_minFill;
-  int m_count[2];
-  Rid m_cover[2];
-  ELEMTYPE m_area[2];
-
-  Bid *m_branchBuf; //[MAXNODES + 1];
   int m_branchCount;
-  Rid m_coverSplit;
+
   ELEMTYPE m_coverSplitArea;
+  Rid m_coverSplit;
+  ELEMTYPE m_area[2];
+  Rid m_cover[2];
+  int m_count[2];
+
+  std::vector<int> m_partition;
+  std::vector<Bid> m_branchBuf;
 
   TPartitionVars() = delete;
-  TPartitionVars(size_t size) {
-    m_partition = new int[size];
-    m_branchBuf = new Bid[size];
-  }
-  ~TPartitionVars() {
-    delete[] m_partition;
-    delete[] m_branchBuf;
-  }
+  TPartitionVars(size_t size) // size: MAXNODES + 1
+      : m_partition(size),
+        m_branchBuf(size)
+  { }
 };
 
 template <class DATATYPE, class ELEMTYPE = double> class drtree3 {

@@ -416,8 +416,93 @@ void RTREE_QUAL::SplitNode(Node *a_node, const Branch *a_branch,
    
 * other rtree libraries
   - https://mdds.readthedocs.io/en/latest/rtree.html#bulk-loading-data
+  - https://kohei.us/2019/02/15/performance-benchmark-on-mdds-rtree/
+  - https://gitlab.com/orcus/perf-test/blob/master/src/osm_load.cpp
+    https://download.geofabrik.de/asia/japan/chubu-220321.osm.bz2
   - boost
+* working with datasets?
+** trying osm data
+   - https://download.geofabrik.de/europe/greece-220320.osm.bz2
+   - https://github.com/ben-strasser/fast-cpp-csv-parser
+   #+begin_src sh
+git clone https://github.com/osmzoso/osm2sqlite.git
+time python3 ./osm2sqlite/osm2sqlite.py ./test/assets/greece-220320.osm ./test/assets/greece-220320.db # 9minutes omg
+
+# or
+(cd osm2sqlite; make ) # edited osm2sqlite: removed sqlite.c added -lsqlite3
+
+time ./osm2sqlite/osm2sqlite ./test/assets/greece-220320.osm ./test/assets/greece-220320_2.db # rm
+
+./osm2sqlite/osm2sqlite ./test/assets/greece-220320.osm ./test/assets/greece-220320_2.db --spatial-index
+   #+end_src
+
+   #+begin_src sh :session *rtree2*
+(cd osm2sqlite; make )
+sudo apt install libsqlite3-dev sqlite3
+$(pkg-config --cflags --libs libsqlite3-dev)
+
+dpkg -L sqlite3
+dpkg -L libsqlite3-dev
+
+litecli ./test/assets/greece-220320.db
+sqlite3 ./test/assets/greece-220320.db
+   #+end_src
+
+   #+begin_src sql :session *rtree2*
+SELECT way_tags.way_id
+FROM way_tags limit 10;
+     
+SELECT way_tags.way_id, min(nodes.lat), max(nodes.lat), min(nodes.lon), max(nodes.lon)
+FROM way_tags
+LEFT JOIN way_nodes ON way_tags.way_id=way_nodes.way_id
+LEFT JOIN nodes ON way_nodes.node_id=nodes.node_id
+WHERE way_tags.key = 'highway'
+limit 10;
+
+select      way_tags.way_id
+from      way_tags      ;	--
+
+
+.tables
+
+pragma table_info('node_tags');
+
+pragma table_info('nodes');
+
+pragma table_info('way_tags');
+
+pragma table_info('way_nodes');
+
+   #+end_src
+
+
+  
+*** querying osm
+    #+begin_src sql :session *rtree2*
+SELECT way_id FROM way_tags WHERE key = 'highway' limit 10;
+
+    #+end_src
+
+** natura etc
+   https://www.eea.europa.eu/data-and-maps/data/natura-12
+   https://www.eea.europa.eu/data-and-maps/data#c0=5&c11=&c5=all&b_start=0&c12=sites
+   #+begin_src sh
+cat ./test/assets/Natura2000_end2020_NATURA2000SITES.csv | awk -F, '{print $1}'
+
+sqlite3
+.mode csv
+
+.import  ./test/assets/Natura2000_end2020_NATURA2000SITES.csv natura
+
+pragma table_info('natura')
+
+select SITENAME,LATITUDE,LONGITUDE from natura;
+
+select count(*) from natura;
+
+   #+end_src
 * <2022-03-28 Mon> debugging handles version
 ** size 4 inserting
    - 0,0 :20
    - 
+

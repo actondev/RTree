@@ -50,7 +50,7 @@ bool QUAL::Search(Nid nid, Rid rid, int &found_count,
     for (int index = 0; index < node.count; ++index, ++nbid) {
       Branch& branch = get_branch(nbid);
       if (Overlap(rid, branch.rect_id)) {
-        if (!Search(branch.child, rid, found_count,
+        if (!Search(branch.child_id, rid, found_count,
                     callback)) {
           // The callback indicated to stop searching
           return false;
@@ -164,12 +164,12 @@ bool QUAL::InsertRect(Bid bid, Nid& root_id, int level) {
     Branch &insert_rect_branch = get_branch(m_insert_rect_branch);
     // add old root node as a child of the new root
     node_cover(insert_rect_branch.rect_id, root_id);
-    insert_rect_branch.child = root_id;
+    insert_rect_branch.child_id = root_id;
     AddBranch(m_insert_rect_branch, new_root_id, falsy_nid);
 
     // add the split node as a child of the new root
     node_cover(insert_rect_branch.rect_id, new_node);
-    insert_rect_branch.child = new_node;
+    insert_rect_branch.child_id = new_node;
     AddBranch(m_insert_rect_branch, new_root_id, falsy_nid);
 
     // set the new root as the root node
@@ -201,7 +201,7 @@ bool QUAL::InsertRectRec(Bid bid, Nid nid,
     int index = PickBranch(rid, nid);
     Bid node_bid = node.get_branch(index);
     Branch& node_branch = get_branch(node_bid);
-    Nid nb_child = node_branch.child;
+    Nid nb_child = node_branch.child_id;
     Rid nb_rect = node_branch.rect_id;
     // recursively insert this record into the picked branch
     bool childWasSplit = InsertRectRec(bid, nb_child, other_nid, level);
@@ -218,7 +218,7 @@ bool QUAL::InsertRectRec(Bid bid, Nid nid,
       node_cover(nb_rect, nb_child);
 
       Branch& insert_rect_rec_branch = get_branch(m_insert_rect_rec_branch);
-      insert_rect_rec_branch.child = other_nid;
+      insert_rect_rec_branch.child_id = other_nid;
       node_cover(insert_rect_rec_branch.rect_id, other_nid);
 
       // The old node is already a child of a_node. Now add the newly-created
@@ -498,7 +498,7 @@ DRTREE_TEMPLATE
 void QUAL::copy_branch(Bid src, Bid dst) {
   Branch& src_branch = get_branch(src);
   Branch& dst_branch = get_branch(dst);
-  dst_branch.child = src_branch.child;
+  dst_branch.child_id = src_branch.child_id;
   dst_branch.data_id = src_branch.data_id;
   copy_rect(src_branch.rect_id, dst_branch.rect_id);
   // cout << "copy branch: " << src << "->" << dst << ": " << pp(branch_data(src)) << endl;
@@ -558,8 +558,8 @@ ELEMTYPE QUAL::RectSphericalVolume(Rid rid) {
 // Use one of the methods to calculate retangle volume
 DRTREE_TEMPLATE
 ELEMTYPE QUAL::CalcRectVolume(Rid rid) {
-  // return RectSphericalVolume(rid);
-  return RectVolume(rid);
+  return RectSphericalVolume(rid);
+  // return RectVolume(rid);
 }
 
 // Decide whether two rectangles overlap.
