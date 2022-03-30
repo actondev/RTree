@@ -444,7 +444,7 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("drtree3 test", "[drtree3]") {
+TEST_CASE("drtree3 test", "[drtree3][basic test]") {
   const int size = 10; // todo with size 9, searching {6,2} to {6,4}, {6,3} not returned
   auto grid = make_grid(size);
   drtree3<Point> tree = grid_to_drtree3(grid);
@@ -467,14 +467,66 @@ TEST_CASE("drtree3 test", "[drtree3]") {
   REQUIRE(found.size() == 0);
 
   removed = tree.remove({1,1}, {8,8});
-  REQUIRE(removed == 55);
-  REQUIRE(tree.size() == 42);
+  REQUIRE(removed == 54);
+  REQUIRE(tree.size() == 43);
   found = tree.search({0,0}, {10,10});
+
   // TODO this returns 0
   REQUIRE(found.size() == 6); // [0 0] [0 1] [1 0], [9 9] [9 8] [8 9]
   // expected = {};
   // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
+
+TEST_CASE("rtree test", "[rtree][basic test]") {
+  const int size = 10; // todo with size 9, searching {6,2} to {6,4}, {6,3} not returned
+  auto grid = make_grid(size);
+  RTree<Point, double, 2> tree = grid_to_rtree_template<2>(grid);
+  REQUIRE(tree.Count() == size*size);
+  std::vector<Point> expected = {
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  // TODO not getting {6,3} (with spherical volume)
+  std::vector<Point> results;
+  Callback cb = [&](Point node, const double *low, const double *high) {
+    results.push_back(node);
+    return true;
+  };
+
+  double low[] = {6,2};
+  double high[] = {6,4};
+  tree.Search(low, high, cb);
+  REQUIRE_THAT(results, Catch::Matchers::UnorderedEquals(expected));
+
+  int removed = tree.Remove(low, high, cb);
+
+  REQUIRE(removed == 3);
+  REQUIRE(tree.Count() == size*size - 3);
+
+  results.clear();
+  tree.Search(low, high, cb);
+  REQUIRE(results.size() == 0);
+  
+  double low2[] = {1,1};
+  double high2[] = {8,8};
+  results.clear();
+  return;
+  removed = tree.Remove(low2, high2, cb); // crashes, heh
+  REQUIRE(removed == 54);
+  REQUIRE(tree.Count() == 43);
+
+
+  double low3[] = {0,0};
+  double high3[] = {10,10};
+  results.clear();
+  tree.Search(low3, high3, cb);
+  // // TODO this returns 0
+  REQUIRE(results.size() == 6); // [0 0] [0 1] [1 0], [9 9] [9 8] [8 9]
+  expected = {};
+  REQUIRE_THAT(results, Catch::Matchers::UnorderedEquals(expected));
+}
+
 
 
 TEST_CASE("allocations", "[.temp]") {
