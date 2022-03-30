@@ -44,10 +44,10 @@ bool QUAL::Search(Nid nid, Rid rid, int &found_count,
   // ASSERT(a_node->m_level >= 0);
   // ASSERT(a_rect);
   Node& node = get_node(nid);
-  Bid nbid = node.get_branch(0);
   if (node.is_internal()) {
     // This is an internal node in the tree
-    for (int index = 0; index < node.count; ++index, ++nbid) {
+    for (int index = 0; index < node.count; ++index) {
+      Bid nbid = get_node_bid(nid, index);
       Branch& branch = get_branch(nbid);
       if (Overlap(rid, branch.rect_id)) {
         if (!Search(branch.child_id, rid, found_count,
@@ -59,7 +59,8 @@ bool QUAL::Search(Nid nid, Rid rid, int &found_count,
     }
   } else {
     // This is a leaf node
-    for (int index = 0; index < node.count; ++index, ++nbid) {
+    for (int index = 0; index < node.count; ++index) {
+      Bid nbid = get_node_bid(nid, index);
       Branch& branch = get_branch(nbid);
       if (Overlap(rid, branch.rect_id)) {
         const DATATYPE &data = branch_data(nbid);
@@ -111,8 +112,8 @@ bool QUAL::RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount) {
     Nid temp_nid = reinsert_list.back();
     reinsert_list.pop_back();
     Node& temp_node = get_node(temp_nid);
-    Bid node_bid = temp_node.get_branch(0);
-    for (int index = 0; index < temp_node.count; ++index, ++node_bid) {
+    for (int index = 0; index < temp_node.count; ++index) {
+      Bid node_bid = get_node_bid(temp_nid, index);
       InsertRect(node_bid, a_root, temp_node.level);
     }
 
@@ -139,11 +140,12 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
   // ASSERT(a_rect && a_node && a_listNode);
   // ASSERT(a_node->m_level >= 0);
   Node& node = get_node(nid);
-  Bid node_bid = node.get_branch(0);
+  // Bid node_bid = node.get_branch(0);
   if (node.is_internal()) {
     // not a leaf node
     bool removed = false;
-    for (int index = 0; index < node.count; ++index, ++node_bid) {
+    for (int index = 0; index < node.count; ++index) {
+      Bid node_bid = get_node_bid(nid, index);
       Branch& branch = get_branch(node_bid);
       Rid branch_rid = branch.rect_id;
       Nid branch_child_id = branch.child_id;
@@ -160,7 +162,7 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
             // child removed, not enough entries in node, eliminate node
             // TODO
             // ReInsert(a_node->m_branch[index].m_child, a_listNode);
-            // DisconnectBranch(a_node, index);
+            DisconnectBranch(nid, index);
             // NB: Before remove refactor this was returning
             index--; // have to revisit same index, as now it's swapped with the
                      // last item
@@ -174,13 +176,14 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
     // A leaf node
     bool removed = false;
         
-    for (int index = 0; index < node.count; ++index, ++node_bid) {
+    for (int index = 0; index < node.count; ++index) {
+      Bid node_bid = get_node_bid(nid, index);
       Branch &branch = get_branch(node_bid);
       if (Overlap(a_rect, branch.rect_id)) {
         // if (predicate(branch_data(branch))) {
           removed = true;
           // TODO
-          // DisconnectBranch(a_node, index);
+          DisconnectBranch(nid, index);
           // NB: Before remove refactor this was returning
           index--; // have to revisit same index, as now it's swapped with the
                    // last item
@@ -192,6 +195,19 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
   }
 }
 
+DRTREE_TEMPLATE
+void QUAL::DisconnectBranch(Nid nid, int index) {
+  ASSERT(nid);
+  Node& node = get_node(nid);
+  ASSERT((index >= 0) && (index < MAXNODES));
+  ASSERT(node.count > 0);
+
+  // Remove element by swapping with the last element to prevent gaps in array
+  // TODO
+  // a_node->m_branch[a_index] = a_node->m_branch[a_node->m_count - 1];
+
+  --node.count;
+}
 
 DRTREE_TEMPLATE
 void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
@@ -231,8 +247,8 @@ int QUAL::PickBranch(Rid rid, Nid nid) {
   int best = 0;
 
   Node& node = get_node(nid);
-  Bid bid = node.branch0;
-  for (int index = 0; index < node.count; ++index, ++bid) {
+  for (int index = 0; index < node.count; ++index) {
+    Bid bid = get_node_bid(nid, index);
     Branch& branch = get_branch(bid);
     Rid cur_rect = branch.rect_id;
     area = CalcRectVolume(cur_rect);
@@ -299,13 +315,14 @@ bool QUAL::InsertRect(Bid bid, Nid& root_id, int level) {
 DRTREE_TEMPLATE
 bool QUAL::InsertRectRec(Bid bid, Nid nid,
                                 Nid& new_nid, int level) {
-  // ASSERT(a_node && a_newNode);
-  // ASSERT(a_level >= 0);
-  // ASSERT(a_level <= a_node->m_level);
+  ASSERT(nid);
+  // ASSERT(new_nid);
+  ASSERT(level >= 0);
 
   // recurse until we reach the correct level for the new record. data records
   // will always be called with a_level == 0 (leaf)
   Node& node = get_node(nid);
+  ASSERT(level <= node.level);
   Branch& branch = get_branch(bid);
   Rid rid = branch.rect_id;
   if (node.level > level) {
@@ -315,7 +332,7 @@ bool QUAL::InsertRectRec(Bid bid, Nid nid,
 
     // find the optimal branch for this record
     int index = PickBranch(rid, nid);
-    Bid node_bid = node.get_branch(index);
+    Bid node_bid = get_node_bid(nid, index);
     Branch& node_branch = get_branch(node_bid);
     Nid nb_child = node_branch.child_id;
     Rid nb_rect = node_branch.rect_id;
@@ -357,7 +374,7 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
   if (node.count < MAXNODES) // Split won't be necessary
   {
     // TODO should addbranch perhaps just return a bid? (which branch was chosen)
-    Bid node_insert_bid = node.get_branch(node.count);
+    Bid node_insert_bid = get_node_bid(nid, node.count);
     // cout << "add branch copying: " << bid << " => node" << nid << "branch#" << node.count << " bid " << node_insert_bid << endl;
     copy_branch(bid, node_insert_bid);
     ++node.count;
@@ -372,6 +389,9 @@ DRTREE_TEMPLATE
 void QUAL::SplitNode(Nid nid, Bid bid, Nid &new_nid) {
   ASSERT(nid);
   ASSERT(bid);
+  // if(!new_nid) {
+  //   new_nid = make_node_id();
+  // }
 
   // Load all the branches into a buffer, initialize old node
   GetBranches(nid, bid, m_partition_vars);
@@ -550,7 +570,7 @@ void QUAL::GetBranches(Nid nid, Bid bid, PartitionVars &a_parVars) {
   for (int index = 0; index < MAXNODES; ++index) {
     // Branch& node_branch = get_branch(nbid);
     // a_parVars.m_branchBuf[index] = a_node.m_branch[index];
-    copy_branch(node.get_branch(index), a_parVars.m_branchBuf[index]);
+    copy_branch(get_node_bid(nid, index), a_parVars.m_branchBuf[index]);
   }
   // a_parVars.m_branchBuf[MAXNODES] = *a_branch;
   copy_branch(bid, a_parVars.m_branchBuf[MAXNODES]);
@@ -586,11 +606,11 @@ DRTREE_TEMPLATE
 void QUAL::node_cover(Rid dst, Nid nid) {
   ASSERT(nid);
   Node& node = get_node(nid);
-  Bid bid0 = node.get_branch(0);
+  Bid bid0 = get_node_bid(nid, 0);
   Branch& branch0 = get_branch(bid0);
   copy_rect(branch0.rect_id, dst);
-  Bid bid = bid0;
-  for (int index = 1; index < node.count; ++index, ++bid) {
+  for (int index = 1; index < node.count; ++index) {
+    Bid bid = get_node_bid(nid, index);
     // we just increase breanch id
     Branch& branch = get_branch(bid);
     combine_rects(dst, dst, branch.rect_id);
@@ -612,6 +632,8 @@ void QUAL::copy_rect(Rid src, Rid dst) {
 
 DRTREE_TEMPLATE
 void QUAL::copy_branch(Bid src, Bid dst) {
+  ASSERT(src);
+  ASSERT(dst);
   Branch& src_branch = get_branch(src);
   Branch& dst_branch = get_branch(dst);
   dst_branch.child_id = src_branch.child_id;

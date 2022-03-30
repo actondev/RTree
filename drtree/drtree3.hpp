@@ -50,6 +50,7 @@ private:
   std::vector<DATATYPE> m_data_store;
 
   std::vector<Node> m_nodes;
+  std::vector<Bid> m_node_branches;
 
   ELEMTYPE m_unitSphereVolume;
 
@@ -96,34 +97,26 @@ private:
 
   // each node has MAXNODES children
 
-  Nid make_node_id(bool attach_branches = true) {
+  Nid make_node_id() {
     Nid id{m_nodes_count++};
     m_nodes.resize(m_nodes_count);
-
-    if (attach_branches) {
-      node_make_branches(id);
+    m_node_branches.resize(m_nodes_count * MAXNODES);
+    for (int i = 0; i < MAXNODES; i++) {
+      m_node_branches[id.id * MAXNODES + i] = make_branch_id();
     }
     return id;
   }
+  
   Node &get_node(Nid id) { return m_nodes[id.id]; }
-  void node_make_branches(Nid id) {
-    Node &node = get_node(id);
-    node.branch0 = make_branch_id();
-    for (int i = 0; i < MAXNODES - 1; i++) {
-      make_branch_id();
-    }
+
+  Bid get_node_bid(Nid id, int idx) {
+    return m_node_branches[id.id * MAXNODES + idx];
   }
 
-  Branch &node_get_branch(Node &node, int idx) {
-    ASSERT(idx < MAXNODES);
-    Bid bid = node.branch0 + idx;
-    return get_branch(bid);
-  }
+  Node &make_node() {
+    Nid nid = make_node_id();
 
-  Node &make_node(bool attach_branches = true) {
-    Nid nid = make_node_id(attach_branches);
-
-    return m_nodes[nid.id];
+    return get_node(nid);
   }
 
   Did store_data(const DATATYPE& data) {
@@ -174,7 +167,7 @@ private:
 
   bool RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount);
   bool RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<Nid> &a_listNode);
-
+  void DisconnectBranch(Nid nid, int index);
 public:
   drtree3(unsigned int dims)
       : m_dims{dims},

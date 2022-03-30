@@ -458,13 +458,13 @@ TEST_CASE("drtree3 test", "[drtree3]") {
   auto found = tree.search({6,2}, {6,4});
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
-  int removed = tree.remove({6,2}, {6,4});
+  // int removed = tree.remove({6,2}, {6,4});
   
-  REQUIRE(removed == 3);
-  REQUIRE(tree.size() == size*size - 3);
+  // REQUIRE(removed == 3);
+  // REQUIRE(tree.size() == size*size - 3);
 
-  found = tree.search({6,2}, {6,4});
-  REQUIRE(found.size() == 0);
+  // found = tree.search({6,2}, {6,4});
+  // REQUIRE(found.size() == 0);
   
 }
 

@@ -59,8 +59,19 @@ struct Branch {
 };
 
 
-std::ostream &operator<<(std::ostream &os, const Bid &bid) {
-  os << "Bid{" << bid.id << "}";
+std::ostream &operator<<(std::ostream &os, const Bid &id) {
+  os << "Bid{" << id.id << "}";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Nid &id) {
+  os << "Nid{" << id.id << "}";
+  return os;
+}
+
+
+std::ostream &operator<<(std::ostream &os, const Rid &id) {
+  os << "Nid{" << id.id << "}";
   return os;
 }
 
@@ -70,8 +81,4 @@ struct Node {
 
   int count = 0; ///< Count
   int level = 0; ///< Leaf is zero, others positive
-  Bid branch0;
-  Bid get_branch(int idx) {
-    return branch0 + idx;
-  }
 };
