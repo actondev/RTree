@@ -113,9 +113,12 @@ private:
     return m_node_branches[id.id * MAXNODES + idx];
   }
 
+  void set_node_bid(Nid id, int idx, Bid bid) {
+    m_node_branches[id.id * MAXNODES + idx] = bid;
+  }
+
   Node &make_node() {
     Nid nid = make_node_id();
-
     return get_node(nid);
   }
 
@@ -165,8 +168,8 @@ private:
   ELEMTYPE CalcRectVolume(Rid);
   bool Search(Nid, Rid, int &found_count, Callback);
 
-  bool RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount);
-  bool RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<Nid> &a_listNode);
+  bool RemoveRect(Nid, Rid, int &found_count);
+  bool RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> &reinsert_list);
   void DisconnectBranch(Nid nid, int index);
 public:
   drtree3(unsigned int dims)

@@ -95,39 +95,35 @@ int QUAL::remove(VEC low, VEC high) {
 }
 
 DRTREE_TEMPLATE
-bool QUAL::RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount) {
-  ASSERT(a_rect && a_root);
-  ASSERT(a_root);
+bool QUAL::RemoveRect(Nid nid, Rid rid, int &found_count) {
+  ASSERT(nid && rid);
 
-  // ListNode *reInsertList = NULL;
   std::vector<Nid> reinsert_list;
 
-  if (!RemoveRectRec(a_root, a_rect, a_foundCount, reinsert_list)) {
+  if (!RemoveRectRec(nid, rid, found_count, reinsert_list)) {
     return false; // nothing removed
   }
 
   // removed
   while (!reinsert_list.empty()) {
-    // Node *tempNode = reInsertList->m_node;
     Nid temp_nid = reinsert_list.back();
+    // cout << "reinsert list " << temp_nid << endl;
     reinsert_list.pop_back();
     Node& temp_node = get_node(temp_nid);
     for (int index = 0; index < temp_node.count; ++index) {
       Bid node_bid = get_node_bid(temp_nid, index);
-      InsertRect(node_bid, a_root, temp_node.level);
+      InsertRect(node_bid, nid, temp_node.level);
     }
-
-    // ListNode *remLNode = reInsertList;
-    // reInsertList = reInsertList->m_next;
-
+    // TODO free node
     // FreeNode(remLNode->m_node);
     // FreeListNode(remLNode);
   }
 
-  Node& root = get_node(a_root);
+  Node& root = get_node(nid);
   if (root.count == 1 && root.is_internal()) {
+    // TODO handle this, free node
     // Node *tempNode = (*a_root)->m_branch[0].m_child;
-
+    
     // ASSERT(tempNode);
     // FreeNode(*a_root);
     // *a_root = tempNode;
@@ -136,11 +132,10 @@ bool QUAL::RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount) {
 }
 
 DRTREE_TEMPLATE
-bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<Nid> &a_listNode) {
-  // ASSERT(a_rect && a_node && a_listNode);
-  // ASSERT(a_node->m_level >= 0);
+bool QUAL::RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> &reinsert) {
+  ASSERT(nid && rid);
   Node& node = get_node(nid);
-  // Bid node_bid = node.get_branch(0);
+  ASSERT(node.level >= 0);
   if (node.is_internal()) {
     // not a leaf node
     bool removed = false;
@@ -149,9 +144,9 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
       Branch& branch = get_branch(node_bid);
       Rid branch_rid = branch.rect_id;
       Nid branch_child_id = branch.child_id;
-      if (Overlap(a_rect, branch_rid)) {
-        if (RemoveRectRec(branch.child_id, a_rect,
-                          a_removedCount, a_listNode)) {
+      if (Overlap(rid, branch_rid)) {
+        if (RemoveRectRec(branch.child_id, rid,
+                          removed_count, reinsert)) {
           Node& branch_child = get_node(branch_child_id);
           if (branch_child.count >= MINNODES) {
             // child removed, just resize parent rect
@@ -161,7 +156,8 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
           } else {
             // child removed, not enough entries in node, eliminate node
             // TODO
-            // ReInsert(a_node->m_branch[index].m_child, a_listNode);
+            // ReInsert(a_node->m_branch[index].m_child, reinsert);
+            reinsert.push_back(make_node_id());
             DisconnectBranch(nid, index);
             // NB: Before remove refactor this was returning
             index--; // have to revisit same index, as now it's swapped with the
@@ -179,7 +175,7 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
     for (int index = 0; index < node.count; ++index) {
       Bid node_bid = get_node_bid(nid, index);
       Branch &branch = get_branch(node_bid);
-      if (Overlap(a_rect, branch.rect_id)) {
+      if (Overlap(rid, branch.rect_id)) {
         // if (predicate(branch_data(branch))) {
           removed = true;
           // TODO
@@ -187,7 +183,7 @@ bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<N
           // NB: Before remove refactor this was returning
           index--; // have to revisit same index, as now it's swapped with the
                    // last item
-          a_removedCount++;
+          removed_count++;
         // }
       }
     }
@@ -203,8 +199,7 @@ void QUAL::DisconnectBranch(Nid nid, int index) {
   ASSERT(node.count > 0);
 
   // Remove element by swapping with the last element to prevent gaps in array
-  // TODO
-  // a_node->m_branch[a_index] = a_node->m_branch[a_node->m_count - 1];
+  set_node_bid(nid, index, get_node_bid(nid, node.count-1));
 
   --node.count;
 }
@@ -237,7 +232,7 @@ void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
 
 DRTREE_TEMPLATE
 int QUAL::PickBranch(Rid rid, Nid nid) {
-  // ASSERT(a_rect && a_node);
+  ASSERT(rid && nid);
 
   bool firstTime = true;
   ELEMTYPE increase;

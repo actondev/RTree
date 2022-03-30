@@ -450,12 +450,12 @@ TEST_CASE("drtree3 test", "[drtree3]") {
   drtree3<Point> tree = grid_to_drtree3(grid);
   REQUIRE(tree.size() == size*size);
   std::vector<Point> expected = {
-    { 3.0, 2.0 },
-    { 3.0, 3.0 },
-    { 3.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
   };
   // TODO not getting {6,3} (with spherical volume)
-  auto found = tree.search({3,2}, {3,4});
+  auto found = tree.search({6,2}, {6,4});
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
   int removed = tree.remove({6,2}, {6,4});
@@ -465,6 +465,15 @@ TEST_CASE("drtree3 test", "[drtree3]") {
 
   found = tree.search({6,2}, {6,4});
   REQUIRE(found.size() == 0);
+
+  removed = tree.remove({1,1}, {8,8});
+  REQUIRE(removed == 55);
+  REQUIRE(tree.size() == 42);
+  found = tree.search({0,0}, {10,10});
+  // TODO this returns 0
+  REQUIRE(found.size() == 6); // [0 0] [0 1] [1 0], [9 9] [9 8] [8 9]
+  // expected = {};
+  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
 
