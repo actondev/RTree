@@ -157,7 +157,7 @@ bool QUAL::RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> 
             // child removed, not enough entries in node, eliminate node
             // TODO
             // ReInsert(a_node->m_branch[index].m_child, reinsert);
-            reinsert.push_back(make_node_id());
+            reinsert.push_back(branch_child_id);
             DisconnectBranch(nid, index);
             // NB: Before remove refactor this was returning
             index--; // have to revisit same index, as now it's swapped with the
