@@ -78,6 +78,122 @@ bool QUAL::Search(Nid nid, Rid rid, int &found_count,
 
 
 DRTREE_TEMPLATE
+int QUAL::remove(VEC low, VEC high) {
+  ASSERT(low.size() == m_dims);
+  ASSERT(high.size() == m_dims);
+  for (unsigned int axis = 0; axis < m_dims; ++axis) {
+    rect_min_ref(m_remove_rect, axis) = low.data()[axis];
+    rect_max_ref(m_remove_rect, axis) = high.data()[axis];
+  }
+
+  int removed_count = 0;
+
+  RemoveRect(m_root_id, m_remove_rect, removed_count);
+  m_size -= removed_count;
+  return removed_count;
+}
+
+DRTREE_TEMPLATE
+bool QUAL::RemoveRect(Nid &a_root, Rid &a_rect, int &a_foundCount) {
+  ASSERT(a_rect && a_root);
+  ASSERT(a_root);
+
+  // ListNode *reInsertList = NULL;
+  std::vector<Nid> reinsert_list;
+
+  if (!RemoveRectRec(a_root, a_rect, a_foundCount, reinsert_list)) {
+    return false; // nothing removed
+  }
+
+  // removed
+  while (!reinsert_list.empty()) {
+    // Node *tempNode = reInsertList->m_node;
+    Nid temp_nid = reinsert_list.back();
+    reinsert_list.pop_back();
+    Node& temp_node = get_node(temp_nid);
+    Bid node_bid = temp_node.get_branch(0);
+    for (int index = 0; index < temp_node.count; ++index, ++node_bid) {
+      InsertRect(node_bid, a_root, temp_node.level);
+    }
+
+    // ListNode *remLNode = reInsertList;
+    // reInsertList = reInsertList->m_next;
+
+    // FreeNode(remLNode->m_node);
+    // FreeListNode(remLNode);
+  }
+
+  Node& root = get_node(a_root);
+  if (root.count == 1 && root.is_internal()) {
+    // Node *tempNode = (*a_root)->m_branch[0].m_child;
+
+    // ASSERT(tempNode);
+    // FreeNode(*a_root);
+    // *a_root = tempNode;
+  }
+  return true;
+}
+
+DRTREE_TEMPLATE
+bool QUAL::RemoveRectRec(Nid nid, Rid a_rect, int &a_removedCount, std::vector<Nid> &a_listNode) {
+  // ASSERT(a_rect && a_node && a_listNode);
+  // ASSERT(a_node->m_level >= 0);
+  Node& node = get_node(nid);
+  Bid node_bid = node.get_branch(0);
+  if (node.is_internal()) {
+    // not a leaf node
+    bool removed = false;
+    for (int index = 0; index < node.count; ++index, ++node_bid) {
+      Branch& branch = get_branch(node_bid);
+      Rid branch_rid = branch.rect_id;
+      Nid branch_child_id = branch.child_id;
+      if (Overlap(a_rect, branch_rid)) {
+        if (RemoveRectRec(branch.child_id, a_rect,
+                          a_removedCount, a_listNode)) {
+          Node& branch_child = get_node(branch_child_id);
+          if (branch_child.count >= MINNODES) {
+            // child removed, just resize parent rect
+            node_cover(branch_rid, branch_child_id);
+            // node_cover(&a_node->m_branch[index].m_rect,
+            //            a_node->m_branch[index].m_child);
+          } else {
+            // child removed, not enough entries in node, eliminate node
+            // TODO
+            // ReInsert(a_node->m_branch[index].m_child, a_listNode);
+            // DisconnectBranch(a_node, index);
+            // NB: Before remove refactor this was returning
+            index--; // have to revisit same index, as now it's swapped with the
+                     // last item
+          }
+          removed = true;
+        }
+      }
+    }
+    return removed;
+  } else {
+    // A leaf node
+    bool removed = false;
+        
+    for (int index = 0; index < node.count; ++index, ++node_bid) {
+      Branch &branch = get_branch(node_bid);
+      if (Overlap(a_rect, branch.rect_id)) {
+        // if (predicate(branch_data(branch))) {
+          removed = true;
+          // TODO
+          // DisconnectBranch(a_node, index);
+          // NB: Before remove refactor this was returning
+          index--; // have to revisit same index, as now it's swapped with the
+                   // last item
+          a_removedCount++;
+        // }
+      }
+    }
+    return removed;
+  }
+}
+
+
+DRTREE_TEMPLATE
 void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
                          const DATATYPE &data) {
 #ifdef _DEBUG
