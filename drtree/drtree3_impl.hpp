@@ -237,7 +237,7 @@ void QUAL::push(const ELEMTYPE *low, const ELEMTYPE *high,
   Branch& branch = get_branch(bid);
   Did did = store_data(data);
   branch.data_id = did;
-  branch.child_id = Nid{};
+  branch.child_id = Nid{}; // reset
   // cout << "Insert: " << bid << pp(data) << endl;
   
   for (unsigned int axis = 0; axis < m_dims; ++axis) {

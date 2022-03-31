@@ -28,7 +28,7 @@ run_tests = executable(
 test('tests',
      run_tests,
      workdir: meson.project_source_root(),
-     args: ['drtree3 test: 100x100']
+     args: ['drtree3 test: 5x5']
      # args: ['[basic test]']
      # args: ['[benchmark]']
      # args: ['[drtree3]']

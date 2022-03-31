@@ -510,7 +510,7 @@ TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test]") {
 
   tree.remove({1,1},{8,8});
   found = tree.search({0, 0}, {10, 10});
-
+  sort_points(found);
   expected =  {{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7}, {0, 8}, {0, 9},
                {1, 0}, {1, 9},
                {2, 0}, {2, 9},
