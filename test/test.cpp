@@ -491,7 +491,9 @@ TEST_CASE("drtree3 test: 5x5", "[drtree3][basic test]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test]") {
+// getting duplicates with MAXNODES 8
+// with MAXNODES 4 it works
+TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test][FIXME]") {
   const int size = 10;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
