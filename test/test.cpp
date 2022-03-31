@@ -8,6 +8,7 @@
 #include <iostream>
 #include <drtree/RTree.h>
 #include <vector>
+#include <random>
 
 using std::cerr;
 using std::cout;
@@ -444,38 +445,118 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("drtree3 test", "[drtree3][basic test]") {
-  const int size = 10; // todo with size 9, searching {6,2} to {6,4}, {6,3} not returned
+void shuffle_deterministic(Grid& grid) {
+  std::mt19937 gen(0);
+  std::shuffle(std::begin(grid.points), std::end(grid.points), gen);
+}
+
+// for debugging, creating the "expected" vectors
+void sort_points(std::vector<Point> &points) {
+  std::sort(points.begin(), points.end(), [](const Point& a, const Point& b) {
+    if( a[0] == b[0] ) {
+      return a[1] < b[1];
+    } else {
+      return a[0] < b[0];
+    }
+  });
+}
+
+TEST_CASE("drtree3 test: 5x5", "[drtree3][basic test]") {
+  const int size = 5;
   auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+
   drtree3<Point> tree = grid_to_drtree3(grid);
   REQUIRE(tree.size() == size*size);
-  std::vector<Point> expected = {
-    { 6.0, 2.0 },
-    { 6.0, 3.0 },
-    { 6.0, 4.0 },
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  expected = {
+    { 3.0, 2.0 },
+    { 3.0, 3.0 },
+    { 3.0, 4.0 },
   };
-  // TODO not getting {6,3} (with spherical volume)
-  auto found = tree.search({6,2}, {6,4});
+
+  // leaving only two strips: x=0 and y=4
+  removed = tree.remove({1,0}, {4, 3});
+  REQUIRE(removed == 16);
+
+  found = tree.search({0,0}, {4, 4});
+  REQUIRE(found.size() == 9);
+  expected = {
+    {0, 0}, {0, 1} , {0, 2}, {0, 3}, {0, 4},
+    {1, 4}, {2, 4}, {3, 4}, {4, 4}
+  };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test]") {
+  const int size = 10;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+  
+  expected = {
+    { 5.0, 5.0 }, { 5.0, 6.0 }, { 5.0, 7.0 },
+    { 6.0, 5.0 }, { 6.0, 6.0 }, { 6.0, 7.0 }};
+  found = tree.search({5, 5}, {6, 7});
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
-  int removed = tree.remove({6,2}, {6,4});
-  
-  REQUIRE(removed == 3);
-  REQUIRE(tree.size() == size*size - 3);
+  tree.remove({1,1},{8,8});
+  found = tree.search({0, 0}, {10, 10});
 
-  found = tree.search({6,2}, {6,4});
-  REQUIRE(found.size() == 0);
-
-  removed = tree.remove({1,1}, {8,8});
-  REQUIRE(removed == 54);
-  REQUIRE(tree.size() == 43);
-  found = tree.search({0,0}, {10,10});
-
-  // TODO this returns 0
-  REQUIRE(found.size() == 6); // [0 0] [0 1] [1 0], [9 9] [9 8] [8 9]
-  // expected = {};
-  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+  expected =  {{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7}, {0, 8}, {0, 9},
+               {1, 0}, {1, 9},
+               {2, 0}, {2, 9},
+               {3, 0}, {3, 9},
+               {4, 0}, {4, 9},
+               {5, 0}, {5, 9},
+               {6, 0}, {6, 9},
+               {7, 0}, {7, 9},
+               {8, 0}, {8, 9},
+               {9, 0}, {9, 1}, {9, 2}, {9, 3}, {9, 4}, {9, 5}, {9, 6}, {9, 7}, {9, 8}, {9, 9}};
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
+
+TEST_CASE("drtree3 test: 100x100", "[drtree3][basic test][fixme]") {
+  const int size = 100;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center:
+  // 100x96
+  removed = tree.remove({0,2},{99,97}); // horizontal
+  REQUIRE(removed == 100*96);
+  removed = tree.remove({2,0},{97,99}); // vertical
+  // 2 horizontal stripes removed 96 in bottom row & 96 in top row
+  REQUIRE(removed == 96 + 96);
+  REQUIRE(tree.size() == 4*4);
+
+  // TODO fixme
+  found = tree.search({0,0}, {100, 100});
+  expected = {
+    {0,0}, {0,1}, {1,0}, {1,1},
+    {0,98}, {0,99}, {1,98}, {1,99},
+    {98,0}, {98,1}, {99,0}, {99,1},
+    {98,98}, {98,99}, {99,98}, {99,99},
+  };
+  cout  << "size " << tree.size() << " found " << pp(found) << endl;
+  
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
 
 TEST_CASE("rtree test", "[rtree][basic test]") {
   const int size = 10; // todo with size 9, searching {6,2} to {6,4}, {6,3} not returned

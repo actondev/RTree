@@ -35,7 +35,7 @@ template <class DATATYPE, class ELEMTYPE = double> class drtree3 {
                              const ELEMTYPE *)>
       Callback;
   typedef std::function<bool(const DATATYPE &)>
-  RemovePredicate;
+  Predicate;
   typedef TPartitionVars<ELEMTYPE> PartitionVars;
   typedef std::vector<ELEMTYPE> VEC;
 
@@ -169,8 +169,8 @@ private:
   ELEMTYPE CalcRectVolume(Rid);
   bool Search(Nid, Rid, int &found_count, Callback);
 
-  bool RemoveRect(Nid, Rid, int &found_count);
-  bool RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> &reinsert_list);
+  bool RemoveRect(Nid, Rid, int &found_count, std::optional<Predicate> = std::nullopt);
+  bool RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> &reinsert_list, std::optional<Predicate>);
   void DisconnectBranch(Nid nid, int index);
 public:
   drtree3(unsigned int dims)
@@ -216,6 +216,7 @@ public:
   std::vector<DATATYPE> search(VEC low, VEC high);
   void search(VEC low, VEC high, std::vector<DATATYPE>& found);
   int remove(VEC low, VEC high);
+  int remove_if(VEC low, VEC high, std::optional<Predicate>);
 };
 
 #include "./drtree3_impl.hpp"

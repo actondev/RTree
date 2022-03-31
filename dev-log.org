@@ -505,4 +505,28 @@ select count(*) from natura;
 ** size 4 inserting
    - 0,0 :20
    - 
+** bug 5x5: search returns duplicate ones
+   Node 0 has branch (#3) Branch 6, which has child Node 0!
+   #+begin_src text
+Search --- Nid{0}
+.. leaf
+search Nid{0}#0Bid{3}{2, 0}
+search Nid{0}#1Bid{4}{0, 0}
+search Nid{0}#2Bid{5}{1, 0}
+search Nid{0}#3Bid{6}{0, 1}
+Bid{34} child Nid{0}
+Search --- Nid{0}
+.. leaf
+search Nid{0}#0Bid{3}{2, 0}
+search Nid{0}#1Bid{4}{0, 0}
+search Nid{0}#2Bid{5}{1, 0}
+search Nid{0}#3Bid{6}{0, 1}
+   #+end_src
 
+
+   aah
+   - Nid{6}#1Bid{34} child Nid{0}
+   - Nid{6}#2Bid{34} child Nid{0}
+     so.. node 6 has branch #1 and #2.. the same branch!
+
+     aha! removal was buggy
