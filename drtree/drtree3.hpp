@@ -98,13 +98,13 @@ private:
   // each node has MAXNODES children
 
   Nid make_node_id() {
-    Nid id{m_nodes_count++};
+    Nid nid{m_nodes_count++};
     m_nodes.resize(m_nodes_count);
     m_node_branches.resize(m_nodes_count * MAXNODES);
     for (int i = 0; i < MAXNODES; i++) {
-      m_node_branches[id.id * MAXNODES + i] = make_branch_id();
+      set_node_bid(nid, i, make_branch_id());
     }
-    return id;
+    return nid;
   }
   
   Node &get_node(Nid id) { return m_nodes[id.id]; }

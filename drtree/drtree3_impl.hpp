@@ -218,8 +218,9 @@ void QUAL::DisconnectBranch(Nid nid, int index) {
   ASSERT(node.count > 0);
 
   // Remove element by swapping with the last element to prevent gaps in array
+  Bid tmp = get_node_bid(nid, index);
   set_node_bid(nid, index, get_node_bid(nid, node.count-1));
-  // TODO reuse node bid
+  set_node_bid(nid, node.count-1, tmp);
   --node.count;
 }
 
@@ -390,9 +391,7 @@ bool QUAL::AddBranch(Bid bid, Nid nid, Nid& new_nid) {
   Node &node = get_node(nid);
   if (node.count < MAXNODES) // Split won't be necessary
   {
-    Bid node_insert_bid = make_branch_id();
-    // TODO free_bid(get_node_bid(nid, node.count))
-    set_node_bid(nid, node.count, node_insert_bid);
+    Bid node_insert_bid = get_node_bid(nid, node.count);
     copy_branch(bid, node_insert_bid);
     ++node.count;
     return false;
