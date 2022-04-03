@@ -71,7 +71,7 @@ std::ostream &operator<<(std::ostream &os, const Nid &id) {
 
 
 std::ostream &operator<<(std::ostream &os, const Rid &id) {
-  os << "Nid{" << id.id << "}";
+  os << "Rid{" << id.id << "}";
   return os;
 }
 

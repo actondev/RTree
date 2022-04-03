@@ -728,3 +728,68 @@ bool QUAL::Overlap(Rid a, Rid b) {
   }
   return true;
 }
+
+DRTREE_TEMPLATE
+std::string QUAL::to_string() {
+  std::ostringstream os;
+
+  std::function<void(Nid, int)> fn =
+      [&](Nid nid, int level) {
+        Node node = get_node(nid);
+        std::string indent;
+        for (int i = 0; i < level; ++i) {
+          indent += "  ";
+        }
+        os << indent << level << ":" << nid << endl;
+        for (int i = 0; i < node.count; i++) {
+          Bid bid = get_node_bid(nid, i);
+          Branch branch = get_branch(bid);
+          Rid rid = branch.rect_id;
+          os << indent << bid << " " << rect_to_string(rid);
+          if(node.level == 0) {
+            os << " data: " << pp(branch_data(bid)) << endl;
+          } else {
+            os << " child: " << branch.child_id << endl;
+            fn(branch.child_id, level + 1);
+          }
+        }
+      };
+
+
+  fn(m_root_id, 0);
+  return os.str();
+}
+
+DRTREE_TEMPLATE
+std::string QUAL::rect_to_string(Rid rid) {
+  std::ostringstream os;
+
+  ASSERT(rid);
+  for(int i=0; i<m_dims; i++) {
+    if(i==0) {
+      os << "{";
+    }
+    os << rect_min_ref(rid, i);
+    if(i != m_dims-1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+
+  os << "...";
+  
+  for (int i = 0; i < m_dims; i++) {
+    if (i == 0) {
+      os << "{";
+    }
+    os << rect_max_ref(rid, i);
+    if (i != m_dims - 1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+
+  return os.str();
+}

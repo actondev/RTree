@@ -217,6 +217,9 @@ public:
   void search(VEC low, VEC high, std::vector<DATATYPE>& found);
   int remove(VEC low, VEC high);
   int remove_if(VEC low, VEC high, std::optional<Predicate>);
+
+  std::string to_string();
+  std::string rect_to_string(Rid);
 };
 
 #include "./drtree3_impl.hpp"

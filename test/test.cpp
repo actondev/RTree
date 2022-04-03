@@ -570,14 +570,24 @@ TEST_CASE("drtree3 test: 7x7", "[drtree3][basic test][FIXME]") {
   // horizontal: 7 * (7-2*2) = 21
   removed = tree.remove({0,retain_side},{size-1,size-1-retain_side});
   REQUIRE(removed == 21);
-  REQUIRE(tree.size() == size*size-removed);
+  REQUIRE(tree.size() == size*size-removed); // 49-21=28
+  found = tree.search({0, 0}, {10, 10});
+  cout << tree.to_string() << endl;
+
+  sort_points(found);
+  cout << "found " << pp(found) << endl;
+  REQUIRE(found.size() == tree.size()); // same node appears as child 3 times
+  return;
 
   removed = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
+  cout << tree.to_string() << endl;
   // 2 horizontal stripes removed 2 in bottom row (height 2) & 2 in top row
   REQUIRE(removed == 2 * (size-retain_side*2)*retain_side); // 12
   REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)
 
   found = tree.search({0, 0}, {10, 10});
+  cout << tree.to_string() << endl;
+  
   sort_points(found);
   expected = {  { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
                 { 0.0, 5.0 }, { 0.0, 6.0 }, { 1.0, 5.0 }, { 1.0, 6.0 },
