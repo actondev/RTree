@@ -526,6 +526,99 @@ TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test][FIXME]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
+
+TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
+  const int size = 4;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center
+  // leaving corners with side = 1
+  removed = tree.remove({0,1},{size,size-1}); // 12
+  REQUIRE(removed == 8);
+  removed = tree.remove({1,0},{size-1,size}); // vertical
+  // 2 horizontal stripes removed 2 in bottom row & 2 in top row
+  REQUIRE(removed == 2 + 2);
+  REQUIRE(tree.size() == 1*4); // 1 left in each cornet
+
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected =  { { 0.0, 0.0 }, { 0.0, 3.0 }, { 3.0, 0.0 }, { 3.0, 3.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("drtree3 test: 7x7", "[drtree3][basic test][FIXME]") {
+  const int size = 7;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+  // horizontal: 7 * (7-2*2) = 21
+  removed = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed == 21);
+  REQUIRE(tree.size() == size*size-removed);
+
+  removed = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
+  // 2 horizontal stripes removed 2 in bottom row (height 2) & 2 in top row
+  REQUIRE(removed == 2 * (size-retain_side*2)*retain_side); // 12
+  REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected = {  { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
+                { 0.0, 5.0 }, { 0.0, 6.0 }, { 1.0, 5.0 }, { 1.0, 6.0 },
+                { 5.0, 0.0 }, { 6.0, 0.0 }, { 5.0, 1.0 }, { 6.0, 1.0 },
+                { 5.0, 5.0}, { 5.0, 6.0 }, { 6.0, 5.0 }, { 6.0, 6.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("drtree3 test: 8x8", "[drtree3][basic test]") {
+  const int size = 8;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  drtree3<Point> tree = grid_to_drtree3(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+  // horizontal: 8 * (8-2*retain_side) = 24
+  removed = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed == 24);
+  REQUIRE(tree.size() == size*size - 24);
+
+  removed = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
+  // 2 horizontal stripes removed 2 rowsof 3 in bottom row & same in top
+  REQUIRE(removed == 2 * (size-2*retain_side)*retain_side); // 8
+  REQUIRE(tree.size() == 4*4); // 4 left in each corner (2x2)
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected = {
+    { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
+    { 0.0, 4.0 }, { 0.0, 5.0 }, { 1.0, 4.0 }, { 1.0, 5.0 },
+    { 4.0, 0.0 }, { 4.0, 1.0 }, { 5.0, 0.0 }, { 5.0, 1.0 },
+    { 4.0, 4.0 }, { 4.0, 5.0 }, { 5.0, 4.0 }, { 5.0, 5.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
 TEST_CASE("drtree3 test: 100x100", "[drtree3][basic test][fixme]") {
   const int size = 100;
   auto grid = make_grid(size);
