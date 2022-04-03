@@ -111,7 +111,7 @@ int QUAL::remove_if(VEC low, VEC high, std::optional<Predicate> pred) {
 }
 
 DRTREE_TEMPLATE
-bool QUAL::RemoveRect(Nid nid, Rid rid, int &found_count, std::optional<Predicate> pred) {
+bool QUAL::RemoveRect(Nid& nid, Rid rid, int &found_count, std::optional<Predicate> pred) {
   ASSERT(nid && rid);
 
   std::vector<Nid> reinsert_list;
@@ -125,12 +125,15 @@ bool QUAL::RemoveRect(Nid nid, Rid rid, int &found_count, std::optional<Predicat
     Nid temp_nid = reinsert_list.back();
     // cout << "reinsert list " << temp_nid << endl;
     reinsert_list.pop_back();
-    Node& temp_node = get_node(temp_nid);
+    Node temp_node = get_node(temp_nid); // TODO should not get reference here
+    // might reallocate etc
+    // TODO why temp_node.count gets increased?
     for (int index = 0; index < temp_node.count; ++index) {
       Bid node_bid = get_node_bid(temp_nid, index);
       // Branch& br = get_branch(node_bid);
       // cout << "reinserting " << node_bid << (br.data_id ? pp(branch_data(node_bid)) : "no data") << endl;
       InsertRect(node_bid, nid, temp_node.level);
+      temp_node = get_node(temp_nid); // to be safe (instead of reference)
     }
     // TODO free node
     // FreeNode(remLNode->m_node);

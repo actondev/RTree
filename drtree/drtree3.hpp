@@ -169,7 +169,7 @@ private:
   ELEMTYPE CalcRectVolume(Rid);
   bool Search(Nid, Rid, int &found_count, Callback);
 
-  bool RemoveRect(Nid, Rid, int &found_count, std::optional<Predicate> = std::nullopt);
+  bool RemoveRect(Nid&, Rid, int &found_count, std::optional<Predicate> = std::nullopt);
   bool RemoveRectRec(Nid nid, Rid rid, int &removed_count, std::vector<Nid> &reinsert_list, std::optional<Predicate>);
   void DisconnectBranch(Nid nid, int index);
 public:
