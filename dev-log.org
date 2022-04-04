@@ -530,3 +530,7 @@ search Nid{0}#3Bid{6}{0, 1}
      so.. node 6 has branch #1 and #2.. the same branch!
 
      aha! removal was buggy
+* <2022-04-04 Mon> just rewrite..
+  - http://postgis.net/docs/support/rtree.pdf
+  - https://github.com/aled/jsi
+    seems close to the paper, LGLPL. Good for reference, how it follows the paper

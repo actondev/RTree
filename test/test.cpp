@@ -7,6 +7,7 @@
 #include <easyprint.hpp>
 #include <iostream>
 #include <drtree/RTree.h>
+#include <aod/rtree.hpp>
 #include <vector>
 #include <random>
 
@@ -70,6 +71,15 @@ drtree<Point> grid_to_rtree(const Grid &grid) {
   for (auto &el : grid.points) {
     const double *pos = &el[0];
     tree.Insert(pos, pos, el);
+  }
+  return tree;
+}
+
+aod::rtree<Point> grid_to_aod_rtree(const Grid &grid) {
+  aod::rtree<Point> tree(grid.dims);
+  for (auto &el : grid.points) {
+    // const double *pos = &el[0];
+    tree.insert(el, el, el);
   }
   return tree;
 }
@@ -554,12 +564,41 @@ TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
+TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
+  const int size = 4;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  REQUIRE(tree.size() == size*size);
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center
+  // leaving corners with side = 1
+  // removed = tree.remove({0,1},{size,size-1}); // 12
+  // REQUIRE(removed == 8);
+  // removed = tree.remove({1,0},{size-1,size}); // vertical
+  // // 2 horizontal stripes removed 2 in bottom row & 2 in top row
+  // REQUIRE(removed == 2 + 2);
+  // REQUIRE(tree.size() == 1*4); // 1 left in each cornet
+
+
+  // found = tree.search({0, 0}, {10, 10});
+  // sort_points(found);
+  // expected =  { { 0.0, 0.0 }, { 0.0, 3.0 }, { 3.0, 0.0 }, { 3.0, 3.0 } };
+  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
 TEST_CASE("drtree3 test: 7x7", "[drtree3][basic test][FIXME]") {
   const int size = 7;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   
   drtree3<Point> tree = grid_to_drtree3(grid);
+  cout << "INIT:" << endl << tree.to_string() << endl;
+
   REQUIRE(tree.size() == size*size);
   std::vector<Point> expected;
   std::vector<Point> found;

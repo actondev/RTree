@@ -1,3 +1,4 @@
+#pragma once
 
 #include <cstdint>
 #include <limits>
@@ -86,8 +87,9 @@ class rtree {
  public:
   
   rtree() = delete;
-  rtree(int size);
+  rtree(int dimensions);
   void insert(Vec low, Vec high, const DATATYPE &data);
+  size_t size();
 
  private:
   // Used by insert
@@ -116,5 +118,24 @@ class rtree {
   /// Select one remaining entry for classification in a group.
   void pick_next();
 };
+
+
+#define PRE template <class DATATYPE, class ELEMTYPE>
+#define QUAL rtree<DATATYPE, ELEMTYPE>
+
+PRE QUAL::rtree(int dimensions)
+    : m_dims(dimensions)
+      {
+        m_size = 0;
+      }
+
+PRE Nid QUAL::choose_leaf(Rid r) { return Nid{}; }
+
+PRE void QUAL::insert(Vec low, Vec high, const DATATYPE &data) {}
+
+PRE size_t QUAL::size() {
+  return m_size;
+}
+
 
 }
