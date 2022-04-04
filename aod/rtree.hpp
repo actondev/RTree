@@ -2,12 +2,17 @@
 
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <ostream>
 #include <vector>
 #include <assert.h>
 #define ASSERT assert
+#define pp(x) easyprint::stringify(x)
 namespace aod {
+
+using std::cout;
+using std::endl;
 
 using id_t = uint32_t;
 struct Id {
@@ -179,14 +184,17 @@ class rtree {
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
 
  private:
-  std::array<Nid, 2> split_node(Nid n, Rid);
+  /// Splits node, places the new M+1 entries (old & new one "e"), & returns the new node id
+  Nid split_and_insert(Nid n, Eid e);
+  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid>& traversal);
   std::array<Eid, 2> pick_seeds(Nid n, Rid r);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
   bool rects_overlap(Rid, Rid);
 
   /// insert entry into leaf node: if a split occured, returns a valid new node
-  Nid insert(Nid, Eid);
+  Nid insert(Nid, Eid, const std::vector<Nid> &traversal);
+  void plain_insert(Nid, Eid);
   Nid choose_leaf(Rid r, std::vector<Nid> &traversal);
   Nid choose_node(Nid n, Rid r, int height, std::vector<Nid> &traversal);
   Nid choose_subtree(Nid n, Rid r);
@@ -304,52 +312,89 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 
   m_traversal.clear();
   Nid n = choose_leaf(entry.rect_id, m_traversal);
-  insert(n, e);
+  insert(n, e, m_traversal);
   ++m_size;
 }
 
-PRE Nid QUAL::insert(Nid n, Eid e) {
-  Nid nn; // new node
+PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid>& traversal) {
+  Nid nn; // new node (falsy)
   Node &node = get_node(n);
   if (node.count < M) {
-    set_node_entry(n, node.count, e);
-    ++node.count;
+    plain_insert(n, e);
   } else {
+    nn = split_and_insert(n, e);
+    ASSERT(nn);
+    cout << "split : " << nn << "traversal " << pp(traversal) << endl;
     // TODO
     //
     // We need to divided the M+1 entries between two nodes.  We
     // need to partition the set of M+1 entries into two groups, one
     // for each node.
-    ASSERT(0);
+    // ASSERT(0);
   }
+  adjust_tree(n, nn, e, traversal);
 }
 
-PRE std::array<Nid, 2> QUAL::split_node(Nid n, Rid r) {
-  std::array<Nid, 2> groups = {make_node_id(), make_node_id()};
+PRE void QUAL::plain_insert(Nid n, Eid e) {
+  Node &node = get_node(n);
+  ASSERT(node.count < M);
+  set_node_entry(n, node.count, e);
+  ++node.count;
+}
+
+PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
+  // std::vector<Eid> entries;
+  Nid nn = make_node_id();
   // seends are the 2 entries that will be placed first into the 2 new nodes
 
   // QS1: Apply algorithm PickSeeds to choose two entries to be the first elemetns fo the groups
-  std::array<Eid, 2> seeds = pick_seeds(n, r);
+  // std::array<Eid, 2> seeds = pick_seeds(n, r);
 
   // QS1: Sssign each to a group
-  set_node_entry(groups[0], 0, seeds[0]);
-  set_node_entry(groups[1], 0, seeds[1]);
+  // set_node_entry(groups[0], 0, seeds[0]);
+  // set_node_entry(groups[1], 0, seeds[1]);
 
   // TODO picknext
   // naive atm
+  // Node& node = get_node(n);
+  // for(int i=0; i< half; ++i) {
+  //   set_node_entry(groups[0], i+1, get_node_entry(n, i));
+  // }
+
+  // for (int i = half; i < node.count; ++i) {
+  //   set_node_entry(groups[1], (i-half)+1, get_node_entry(n, i));
+  // }
+
+  // naively move half the entries into the new branch
+
   Node& node = get_node(n);
   int half = node.count / 2;
-  for(int i=0; i< half; ++i) {
-    set_node_entry(groups[0], i+1, get_node_entry(n, i));
+  for(int i=half; i< node.count; ++i) {
+    plain_insert(nn, get_node_entry(n, i));
   }
+  plain_insert(nn, e); // adding also the new entry
+  node.count = half;
 
-  for (int i = half; i < node.count; ++i) {
-    set_node_entry(groups[1], (i-half)+1, get_node_entry(n, i));
-  }
+  return nn;
 }
 
-PRE void QUAL::adjust_tree(Nid n, Nid nn) {
-
+PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid>& traversal) {
+  for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
+    Nid parent = *it;
+    cout << "adjusting parent " << parent << endl;
+    // TODO adjusting MBR
+  }
+  if(n == m_root_id && nn) {
+    // static std::vector<Nid> no_traversal;
+    // Nid new_root = insert(m_root, Eid e)
+    // root split
+    // 1 create entry with rect covering nn (new node)
+    Eid new_entry = make_entry_id(); // TODO make_entry_from_node
+    // 2
+    Nid new_root = split_and_insert(n, new_entry);
+    // TODO adjust MBR
+    
+  }
 }
 
 /// Linear Pick Seeds. Pick first entry for each group. We get 2
@@ -484,3 +529,4 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
 }
 
 } // aod namespace
+#undef pp
