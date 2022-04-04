@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <ostream>
 #include <vector>
@@ -76,6 +77,9 @@ class rtree {
 
   typedef std::vector<ELEMTYPE> Vec;
 
+  using Predicate = std::function<bool(const DATATYPE &)>;
+  using SearchCb = std::function<bool(const DATATYPE &)>;
+
  private:
    /// max entries per node
   const int M = 8; // max entries per node
@@ -90,6 +94,7 @@ class rtree {
   id_t m_rects_count = 0;
   id_t m_entries_count = 0;
   id_t m_nodes_count = 0;
+  id_t m_data_count = 0;
   Nid m_root_id;
   Rid m_temp_rect;
 
@@ -98,6 +103,7 @@ class rtree {
   std::vector<Node> m_nodes;
   std::vector<Eid> m_node_entries;
   std::vector<Entry> m_entries;
+  std::vector<DATATYPE> m_data;
 
   Rid make_rect_id() {
     Rid res{m_rects_count++};
@@ -123,9 +129,24 @@ class rtree {
     m_entries.resize(m_entries_count);
     Entry &entry = get_entry(e);
     entry.rect_id = make_rect_id();
-
     return e;
   }
+
+  Did make_data_id() {
+    Did d{m_data_count++};
+    m_data.resize(m_data_count);
+    return d;
+  }
+
+  void set_data(Did did, const DATATYPE& data) {
+    ASSERT(did);
+    m_data[did.id] = data;
+  }
+
+  const DATATYPE& get_data(Did did) {
+    ASSERT(did);
+    return m_data[did.id];
+  };
 
   Eid get_node_entry(Nid n, int idx) { return m_node_entries[n.id * M + idx]; }
   void set_node_entry(Nid n, int idx, Eid e) { m_node_entries[n.id * M + idx] = e; }
@@ -151,11 +172,14 @@ class rtree {
   
   rtree() = delete;
   rtree(int dimensions);
-  void insert(Vec low, Vec high, const DATATYPE &data);
+  void insert(const Vec &low, const Vec &high, const DATATYPE &data);
   size_t size();
+  std::vector<DATATYPE> search(const Vec &low, const Vec &high);
 
  private:
-
+  bool search(Nid, Rid, int &found_count, SearchCb);
+  bool rect_contains(Rid bigger, Rid smaller);
+  bool rects_overlap(Rid, Rid);
 
   // Used by insert
   Nid choose_leaf(Rid r);
@@ -260,9 +284,11 @@ PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
   }
 }
 
-PRE void QUAL::insert(Vec low, Vec high, const DATATYPE &data) {
+PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   Eid e = make_entry_id(); // also sets the rect
   Entry& entry = get_entry(e);
+  entry.data_id = make_data_id();
+  set_data(entry.data_id, data);
   Rid r = entry.rect_id;
 
   for(int i=0; i<m_dims; i++) {
@@ -271,9 +297,10 @@ PRE void QUAL::insert(Vec low, Vec high, const DATATYPE &data) {
   }
   
   Nid n = choose_leaf(entry.rect_id);
-  const Node& node = get_node(n);
+  Node& node = get_node(n);
   if(node.count < M) {
     set_node_entry(n, node.count, e);
+    ++node.count;
   } else {
     // TODO split
     ASSERT(0);
@@ -296,5 +323,75 @@ PRE ELEMTYPE QUAL::rect_volume(Rid r) {
 
 PRE size_t QUAL::size() { return m_size; }
 
+PRE std::vector<DATATYPE> QUAL::search(const Vec &low,const Vec &high) {
+  ASSERT(low.size() == m_dims);
+  ASSERT(high.size() == m_dims);
+  std::vector<DATATYPE> res;
+  for(int i=0; i<m_dims; ++i) {
+    rect_low_ref(m_temp_rect, i) = low[i];
+    rect_high_ref(m_temp_rect, i) = high[i];
+  }
+  SearchCb cb = [&res](const DATATYPE &data) {
+    res.push_back(data);
+    return true;
+  };
 
+  int found_count = 0;
+  search(m_root_id, m_temp_rect, found_count, cb);
+
+  return res;
 }
+
+PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
+  Node& node = get_node(n);
+  if(node.is_internal()) {
+    for(int i=0; i<node.count; ++i) {
+      Eid e = get_node_entry(n, i);
+      Entry& entry = get_entry(e);
+      if(rect_contains(r, entry.rect_id)) {
+        if(!search(entry.child_id, r, found_count, cb)) {
+          // stop searching
+          return false;
+        }
+      }
+    }
+  } else {
+    // leaf
+    for (int i = 0; i < node.count; ++i) {
+      Eid e = get_node_entry(n, i);
+      Entry &entry = get_entry(e);
+      // TODO define some algorithm for search: overlap vs contain, etc..
+      if (rects_overlap(r, entry.rect_id)) {
+        if (!cb(get_data(entry.data_id))) {
+          // stop searching
+          return false;
+        } else {
+          ++found_count;
+        }
+      }
+    }
+  }
+  return true; // continue searching
+}
+
+PRE bool QUAL::rect_contains(Rid bigger, Rid smaller) {
+  for (unsigned int index = 0; index < m_dims; ++index) {
+    if (rect_low_ref(bigger, index) > rect_low_ref(smaller, index) ||
+        rect_high_ref(bigger, index) < rect_high_ref(smaller, index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+PRE bool QUAL::rects_overlap(Rid a, Rid b) {
+  for (unsigned int index = 0; index < m_dims; ++index) {
+    if (rect_low_ref(a, index) > rect_high_ref(b, index) ||
+        rect_low_ref(b, index) > rect_high_ref(a, index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // aod namespace
