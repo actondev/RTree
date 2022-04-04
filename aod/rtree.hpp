@@ -88,6 +88,8 @@ class rtree {
   
   size_t m_size;
   id_t m_rects_count = 0;
+  id_t m_entries_count = 0;
+  id_t m_nodes_count = 0;
   Nid m_root_id;
   Rid m_temp_rect;
 
@@ -105,9 +107,28 @@ class rtree {
     return res;
   }
 
-  Eid make_entry_id() { return Eid{}; }
+  Nid make_node_id() {
+    Nid nid{m_nodes_count++};
+    m_nodes.resize(m_nodes_count);
+    m_node_entries.resize(m_nodes_count * M);
+    for (int i = 0; i < M; i++) {
+      // TODO needed?
+      set_node_entry(nid, i, make_entry_id());
+    }
+    return nid;
+  }
+
+  Eid make_entry_id() {
+    Eid e{m_entries_count++};
+    m_entries.resize(m_entries_count);
+    Entry &entry = get_entry(e);
+    entry.rect_id = make_rect_id();
+
+    return e;
+  }
 
   Eid get_node_entry(Nid n, int idx) { return m_node_entries[n.id * M + idx]; }
+  void set_node_entry(Nid n, int idx, Eid e) { m_node_entries[n.id * M + idx] = e; }
 
   Node& get_node(Nid n) {
     return m_nodes[n.id];
@@ -175,30 +196,38 @@ PRE QUAL::rtree(int dimensions)
     : m_dims(dimensions)
       {
         m_size = 0;
+        m_root_id = make_node_id();
+        m_temp_rect = make_rect_id();
       }
 
 PRE Nid QUAL::choose_leaf(Rid r) { return choose_node(m_root_id, r, 0); }
 
 PRE Nid QUAL::choose_node(Nid n, Rid r, int height) {
+  ASSERT(n);
+  ASSERT(r);
   Node& node = get_node(n);
   if(node.height == height) {
     return n;
   }
-  // CL3. If N is not a leaf, let F be the entry in N whose rectangle
-  // FI needs least enlargment to include EI. Resolved ties by
-  // choosing the entry with the rectangle of smallest area.
+  Nid subtree = choose_subtree(n, r);
+  return choose_node(n, r, height);
 }
 
 PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
-  bool firstTime = true;
+  // CL3. If N is not a leaf, let F be the entry in N whose rectangle
+  // FI needs least enlargment to include EI. Resolved ties by
+  // choosing the entry with the rectangle of smallest area.
+
+  bool first_run = true;
   ELEMTYPE increase;
-  ELEMTYPE bestIncr = (ELEMTYPE)-1;
+  ELEMTYPE best_incr = (ELEMTYPE)-1;
   ELEMTYPE area;
-  ELEMTYPE bestArea;
+  ELEMTYPE best_area;
   Eid best;
 
   Node& node = get_node(n);
   ASSERT(node.count);
+  
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(n, i);
     Entry& entry = get_entry(e);
@@ -206,20 +235,24 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
     area = rect_volume(entry_rect);
     combine_rects(r, entry_rect, m_temp_rect);
     increase = rect_volume(m_temp_rect) - area;
-    if ((increase < bestIncr) || firstTime) {
+    if ((increase < best_incr) || first_run) {
+      // clearly better (or init)
       best = e;
-      bestArea = area;
-      bestIncr = increase;
-      firstTime = false;
-    } else if ((increase == bestIncr) && (area < bestArea)) {
+      best_area = area;
+      best_incr = increase;
+      first_run = false;
+    } else if ((increase == best_incr) && (area < best_area)) {
+      // Resolved ties by choosing the entry with the rectangle of
+      // smallest area
       best = e;
-      bestArea = area;
-      bestIncr = increase;
+      best_area = area;
+      best_incr = increase;
     }
   }
   Entry& entry = get_entry(best);
   return entry.child_id;
 }
+
 PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
   for (int index = 0; index < m_dims; index++) {
     rect_low_ref(dst, index) = Min(rect_low_ref(a, index), rect_low_ref(b, index));
@@ -228,7 +261,24 @@ PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
 }
 
 PRE void QUAL::insert(Vec low, Vec high, const DATATYPE &data) {
-  Eid e = make_entry_id();
+  Eid e = make_entry_id(); // also sets the rect
+  Entry& entry = get_entry(e);
+  Rid r = entry.rect_id;
+
+  for(int i=0; i<m_dims; i++) {
+    rect_low_ref(r, i) = low[i];
+    rect_high_ref(r, i) = high[i];
+  }
+  
+  Nid n = choose_leaf(entry.rect_id);
+  const Node& node = get_node(n);
+  if(node.count < M) {
+    set_node_entry(n, node.count, e);
+  } else {
+    // TODO split
+    ASSERT(0);
+  }
+  ++m_size;
 }
 
 PRE ELEMTYPE QUAL::rect_volume(Rid r) {
