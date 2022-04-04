@@ -98,6 +98,8 @@ class rtree {
   Nid m_root_id;
   Rid m_temp_rect;
 
+  std::vector<Nid> m_traversal;
+
   std::vector<ELEMTYPE> m_rects_low;
   std::vector<ELEMTYPE> m_rects_high;
   std::vector<Node> m_nodes;
@@ -177,18 +179,21 @@ class rtree {
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
 
  private:
+  std::array<Nid, 2> split_node(Nid n, Rid);
+  std::array<Eid, 2> pick_seeds(Nid n, Rid r);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
   bool rects_overlap(Rid, Rid);
 
-  // Used by insert
-  Nid choose_leaf(Rid r);
-  Nid choose_node(Nid n, Rid r, int height);
+  /// insert entry into leaf node: if a split occured, returns a valid new node
+  Nid insert(Nid, Eid);
+  Nid choose_leaf(Rid r, std::vector<Nid> &traversal);
+  Nid choose_node(Nid n, Rid r, int height, std::vector<Nid> &traversal);
   Nid choose_subtree(Nid n, Rid r);
 
   /// Ascend from leaf node L to the root, adjusting rectangles and
   /// propagating node splits as necessary
-  Nid adjust_tree(Nid n, Nid nn);
+  void adjust_tree(Nid n, Nid nn);
 
   /// Given an R-tree whose root node is T, find the leaf node
   /// containing the index entry E
@@ -224,17 +229,18 @@ PRE QUAL::rtree(int dimensions)
         m_temp_rect = make_rect_id();
       }
 
-PRE Nid QUAL::choose_leaf(Rid r) { return choose_node(m_root_id, r, 0); }
+PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) { return choose_node(m_root_id, r, 0, traversal); }
 
-PRE Nid QUAL::choose_node(Nid n, Rid r, int height) {
+PRE Nid QUAL::choose_node(Nid n, Rid r, int height, std::vector<Nid> &traversal) {
   ASSERT(n);
   ASSERT(r);
   Node& node = get_node(n);
   if(node.height == height) {
     return n;
   }
+  traversal.push_back(n);
   Nid subtree = choose_subtree(n, r);
-  return choose_node(n, r, height);
+  return choose_node(n, r, height, traversal);
 }
 
 PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
@@ -295,17 +301,100 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
     rect_low_ref(r, i) = low[i];
     rect_high_ref(r, i) = high[i];
   }
-  
-  Nid n = choose_leaf(entry.rect_id);
-  Node& node = get_node(n);
-  if(node.count < M) {
+
+  m_traversal.clear();
+  Nid n = choose_leaf(entry.rect_id, m_traversal);
+  insert(n, e);
+  ++m_size;
+}
+
+PRE Nid QUAL::insert(Nid n, Eid e) {
+  Nid nn; // new node
+  Node &node = get_node(n);
+  if (node.count < M) {
     set_node_entry(n, node.count, e);
     ++node.count;
   } else {
-    // TODO split
+    // TODO
+    //
+    // We need to divided the M+1 entries between two nodes.  We
+    // need to partition the set of M+1 entries into two groups, one
+    // for each node.
     ASSERT(0);
   }
-  ++m_size;
+}
+
+PRE std::array<Nid, 2> QUAL::split_node(Nid n, Rid r) {
+  std::array<Nid, 2> groups = {make_node_id(), make_node_id()};
+  // seends are the 2 entries that will be placed first into the 2 new nodes
+
+  // QS1: Apply algorithm PickSeeds to choose two entries to be the first elemetns fo the groups
+  std::array<Eid, 2> seeds = pick_seeds(n, r);
+
+  // QS1: Sssign each to a group
+  set_node_entry(groups[0], 0, seeds[0]);
+  set_node_entry(groups[1], 0, seeds[1]);
+
+  // TODO picknext
+  // naive atm
+  Node& node = get_node(n);
+  int half = node.count / 2;
+  for(int i=0; i< half; ++i) {
+    set_node_entry(groups[0], i+1, get_node_entry(n, i));
+  }
+
+  for (int i = half; i < node.count; ++i) {
+    set_node_entry(groups[1], (i-half)+1, get_node_entry(n, i));
+  }
+}
+
+PRE void QUAL::adjust_tree(Nid n, Nid nn) {
+
+}
+
+/// Linear Pick Seeds. Pick first entry for each group. We get 2
+/// groups after splittinga node.
+PRE std::array<Eid, 2> QUAL::pick_seeds(Nid n, Rid r) {
+  std::array<Eid, 2> res;
+
+
+  // TODO
+  res[0] = get_node_entry(n, 0);
+  res[1] = get_node_entry(n, 1);
+
+  // [Find extreme rectangles along all dimensions] Along each dimension, find the entry whose rectangle has the highest low side, and the one with the lowest high side. Record the separation.
+
+  // [Adjust for shape of the rectangle cluster] Normalize the
+  // separations by dividing by the width of the entire set along the
+  // corresponding dimension
+
+  /**
+     From RTree
+
+  int seed0 = 0, seed1 = 0;
+  ELEMTYPEREAL worst, waste;
+  ELEMTYPEREAL area[MAXNODES + 1];
+
+  for (int index = 0; index < a_parVars->m_total; ++index) {
+    area[index] = CalcRectVolume(&a_parVars->m_branchBuf[index].m_rect);
+  }
+
+  worst = -a_parVars->m_coverSplitArea - 1;
+  for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
+    for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
+      Rect oneRect = CombineRect(&a_parVars->m_branchBuf[indexA].m_rect,
+                                 &a_parVars->m_branchBuf[indexB].m_rect);
+      waste = CalcRectVolume(&oneRect) - area[indexA] - area[indexB];
+      if (waste > worst) {
+        worst = waste;
+        seed0 = indexA;
+        seed1 = indexB;
+      }
+    }
+  }
+   */
+
+  return res;
 }
 
 PRE ELEMTYPE QUAL::rect_volume(Rid r) {
