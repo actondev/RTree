@@ -565,7 +565,7 @@ TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
 }
 
 TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
-  const int size = 2;
+  const int size = 4;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   
@@ -575,10 +575,11 @@ TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
   std::vector<Point> found;
   int removed;
 
-  found = tree.search({0, 0}, {1, 1});
+  cout << "-- tree " << endl << tree.to_string();
+  found = tree.search({1,1}, {2, 2});
   sort_points(found);
   REQUIRE(found.size() == 4);
-  expected = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+  expected = {{1, 1}, {1, 2}, {2, 1}, {2, 2}};
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
   // removing a fat cross in the center

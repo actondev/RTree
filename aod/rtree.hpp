@@ -1,12 +1,12 @@
 #pragma once
 
+#include <assert.h>
 #include <cstdint>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <ostream>
 #include <vector>
-#include <assert.h>
 #define ASSERT assert
 #define pp(x) easyprint::stringify(x)
 namespace aod {
@@ -174,6 +174,7 @@ class rtree {
   inline ELEMTYPE &rect_high_ref(Rid r, int dim) {
     return m_rects_high[r.id * m_dims + dim];
   }
+  std::string rect_to_string(Rid);
 
  public:
   
@@ -182,6 +183,7 @@ class rtree {
   void insert(const Vec &low, const Vec &high, const DATATYPE &data);
   size_t size();
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
+  std::string to_string();
 
  private:
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the new node id
@@ -214,30 +216,29 @@ class rtree {
   /// smaller if possible
   void condense_tree(Node T);
 
-
   // TODO signatures
-  
+
   /// Select two entries to be the first elements of the group
   void pick_seeds();
   /// Select one remaining entry for classification in a group.
   void pick_next();
 
   void combine_rects(Rid a, Rid b, Rid dst);
+  void update_entry_rect(Eid e);
 };
-
 
 #define PRE template <class DATATYPE, class ELEMTYPE>
 #define QUAL rtree<DATATYPE, ELEMTYPE>
 
-PRE QUAL::rtree(int dimensions)
-    : m_dims(dimensions)
-      {
-        m_size = 0;
-        m_root_id = make_node_id();
-        m_temp_rect = make_rect_id();
-      }
+PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
+  m_size = 0;
+  m_root_id = make_node_id();
+  m_temp_rect = make_rect_id();
+}
 
-PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) { return choose_node(m_root_id, r, 0, traversal); }
+PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) {
+  return choose_node(m_root_id, r, 0, traversal);
+}
 
 PRE Nid QUAL::choose_node(Nid n, Rid r, int height,
                           std::vector<Nid> &traversal) {
@@ -294,9 +295,31 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
 }
 
 PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
-  for (int index = 0; index < m_dims; index++) {
-    rect_low_ref(dst, index) = Min(rect_low_ref(a, index), rect_low_ref(b, index));
-    rect_high_ref(dst, index) = Max(rect_high_ref(a, index), rect_high_ref(b, index));
+  for (int i = 0; i < m_dims; i++) {
+    rect_low_ref(dst, i) =
+        Min(rect_low_ref(a, i), rect_low_ref(b, i));
+    rect_high_ref(dst, i) =
+        Max(rect_high_ref(a, i), rect_high_ref(b, i));
+  }
+}
+
+PRE void QUAL::update_entry_rect(Eid e) {
+  const Entry& the_entry = get_entry(e);
+  Rid r = the_entry.rect_id;
+  Nid n = the_entry.child_id;
+  if(!n) return;
+  Node& node = get_node(n);
+  if(!node.count) return;
+  // going through the child node entries
+  Eid child_e = get_node_entry(n, 0);
+  const Entry& child_entry = get_entry(child_e);
+  for (int i = 0; i < m_dims; i++) {
+    rect_low_ref(r, i) = rect_low_ref(child_entry.rect_id, i);
+    rect_high_ref(r, i) = rect_high_ref(child_entry.rect_id, i);
+  }
+  for (int i = 1; i < node.count; ++i) {
+    Eid e = get_node_entry(n, i);
+    combine_rects(get_entry(e).rect_id, r, r);
   }
 }
 
@@ -393,13 +416,15 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     Node &new_node = get_node(nn);
     ASSERT(root.height == new_node.height);
 
-    Eid old_root_e = make_entry_id(); // TODO rect: absorb root MBR
+    Eid old_root_e = make_entry_id();
     Entry &old_root_entry = get_entry(old_root_e);
     old_root_entry.child_id = m_root_id;
+    update_entry_rect(old_root_e);
 
     Eid new_node_e = make_entry_id();
     Entry &new_node_entry = get_entry(new_node_e);
     new_node_entry.child_id = nn;
+    update_entry_rect(new_node_e);
 
     Nid new_root_id = make_node_id();
     Node &new_root = get_node(new_root_id);
@@ -553,5 +578,68 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
   return true;
 }
 
-} // aod namespace
+PRE std::string QUAL::to_string() {
+  std::ostringstream os;
+
+  std::function<void(Nid, int)> fn =
+      [&](Nid nid, int level) {
+        Node node = get_node(nid);
+        std::string indent;
+        for (int i = 0; i < level; ++i) {
+          indent += "  ";
+        }
+        os << indent << level << ":" << nid << endl;
+        for (int i = 0; i < node.count; i++) {
+          Eid e = get_node_entry(nid, i);
+          Entry entry = get_entry(e);
+          Rid r = entry.rect_id;
+          os << indent << e << " " << rect_to_string(r);
+          if(node.height == 0) {
+            os << " data: " << pp(get_data(entry.data_id)) << endl;
+          } else {
+            os << " child: " << entry.child_id << endl;
+            fn(entry.child_id, level + 1);
+          }
+        }
+      };
+
+
+  fn(m_root_id, 0);
+  return os.str();
+}
+
+PRE std::string QUAL::rect_to_string(Rid rid) {
+  std::ostringstream os;
+
+  ASSERT(rid);
+  for(int i=0; i<m_dims; i++) {
+    if(i==0) {
+      os << "{";
+    }
+    os << rect_low_ref(rid, i);
+    if(i != m_dims-1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+
+  os << "...";
+  
+  for (int i = 0; i < m_dims; i++) {
+    if (i == 0) {
+      os << "{";
+    }
+    os << rect_high_ref(rid, i);
+    if (i != m_dims - 1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+
+  return os.str();
+}
+
+} // namespace aod
 #undef pp
