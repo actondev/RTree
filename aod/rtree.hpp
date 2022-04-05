@@ -17,13 +17,11 @@ using std::endl;
 using id_t = uint32_t;
 struct Id {
   static const id_t nullid = std::numeric_limits<id_t>::max();
-  id_t id = nullid; // 
-  operator bool() const {
-    return id != nullid;
-  }
-  Id(): Id(nullid){};
-  Id(const Id& other): Id(other.id){};
-  Id(id_t id): id{id} {}
+  id_t id = nullid; //
+  operator bool() const { return id != nullid; }
+  Id() : Id(nullid){};
+  Id(const Id &other) : Id(other.id){};
+  Id(id_t id) : id{id} {}
 };
 
 // Rect Id
@@ -54,9 +52,9 @@ struct Node {
   bool is_internal() { return (height > 0); } // Not a leaf, but a internal node
   bool is_leaf() { return (height == 0); }    // A leaf, contains data
 
-  int count = 0; ///< children entries count. Between m and M
+  int count = 0;  ///< children entries count. Between m and M
   int height = 0; ///< zero for leaf, positive otherwise
-  Rid rect_id; // TODO rect (mbr) for Node? not present in RTree code
+  Rid rect_id;    // TODO rect (mbr) for Node? not present in RTree code
 };
 
 std::ostream &operator<<(std::ostream &os, const Bid &id) {
@@ -69,14 +67,12 @@ std::ostream &operator<<(std::ostream &os, const Nid &id) {
   return os;
 }
 
-
 std::ostream &operator<<(std::ostream &os, const Rid &id) {
   os << "Rid{" << id.id << "}";
   return os;
 }
 
-template <class DATATYPE, class ELEMTYPE = double>
-class rtree {
+template <class DATATYPE, class ELEMTYPE = double> class rtree {
   static_assert(std::numeric_limits<ELEMTYPE>::is_iec559,
                 "'COORD_TYPE' accepts floating-point types only");
 
@@ -85,8 +81,8 @@ class rtree {
   using Predicate = std::function<bool(const DATATYPE &)>;
   using SearchCb = std::function<bool(const DATATYPE &)>;
 
- private:
-   /// max entries per node
+private:
+  /// max entries per node
   const int M = 8; // max entries per node
 
   /// min entries per node. Could be hardcoded 2 as well, the paper
@@ -94,7 +90,7 @@ class rtree {
   const int m = M / 2;
 
   int m_dims;
-  
+
   size_t m_size;
   id_t m_rects_count = 0;
   id_t m_entries_count = 0;
@@ -145,39 +141,38 @@ class rtree {
     return d;
   }
 
-  void set_data(Did did, const DATATYPE& data) {
+  void set_data(Did did, const DATATYPE &data) {
     ASSERT(did);
     m_data[did.id] = data;
   }
 
-  const DATATYPE& get_data(Did did) {
+  const DATATYPE &get_data(Did did) {
     ASSERT(did);
     return m_data[did.id];
   };
 
-  Eid get_node_entry(Nid n, int idx) { return m_node_entries[n.id * M + idx]; }
-  void set_node_entry(Nid n, int idx, Eid e) { m_node_entries[n.id * M + idx] = e; }
-
-  Node& get_node(Nid n) {
-    return m_nodes[n.id];
+  Eid get_node_entry(Nid n, int idx) {
+    return m_node_entries[n.id * M + idx];
+  }
+  void set_node_entry(Nid n, int idx, Eid e) {
+    m_node_entries[n.id * M + idx] = e;
   }
 
-  Entry& get_entry(Eid e) {
-    return m_entries[e.id];
-  }
+  Node &get_node(Nid n) { return m_nodes[n.id]; }
+
+  Entry &get_entry(Eid e) { return m_entries[e.id]; }
 
   ELEMTYPE rect_volume(Rid);
 
-  inline ELEMTYPE &rect_low_ref(Rid r, int dim) {
+  inline ELEMTYPE &rect_low_ref(const Rid &r, int dim) {
     return m_rects_low[r.id * m_dims + dim];
   }
-  inline ELEMTYPE &rect_high_ref(Rid r, int dim) {
+  inline ELEMTYPE &rect_high_ref(const Rid &r, int dim) {
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
 
- public:
-  
+public:
   rtree() = delete;
   rtree(int dimensions);
   void insert(const Vec &low, const Vec &high, const DATATYPE &data);
@@ -185,10 +180,11 @@ class rtree {
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
   std::string to_string();
 
- private:
-  /// Splits node, places the new M+1 entries (old & new one "e"), & returns the new node id
+private:
+  /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
+  /// new node id
   Nid split_and_insert(Nid n, Eid e);
-  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid>& traversal);
+  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid> &traversal);
   std::array<Eid, 2> pick_seeds(Nid n, Rid r);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
@@ -266,12 +262,12 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
   ELEMTYPE best_area;
   Eid best;
 
-  Node& node = get_node(n);
+  Node &node = get_node(n);
   ASSERT(node.count);
-  
+
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(n, i);
-    Entry& entry = get_entry(e);
+    Entry &entry = get_entry(e);
     Rid entry_rect = entry.rect_id;
     area = rect_volume(entry_rect);
     combine_rects(r, entry_rect, m_temp_rect);
@@ -290,7 +286,7 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
       best_incr = increase;
     }
   }
-  Entry& entry = get_entry(best);
+  Entry &entry = get_entry(best);
   return entry.child_id;
 }
 
@@ -324,13 +320,14 @@ PRE void QUAL::update_entry_rect(Eid e) {
 }
 
 PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
+  // cout << "insert " << pp(data) << endl;
   Eid e = make_entry_id(); // also sets the rect
-  Entry& entry = get_entry(e);
+  Entry &entry = get_entry(e);
   entry.data_id = make_data_id();
   set_data(entry.data_id, data);
   Rid r = entry.rect_id;
 
-  for(int i=0; i<m_dims; i++) {
+  for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
     rect_high_ref(r, i) = high[i];
   }
@@ -341,7 +338,7 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   ++m_size;
 }
 
-PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid>& traversal) {
+PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
   if (node.count < M) {
@@ -372,8 +369,8 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   Nid nn = make_node_id();
   // seends are the 2 entries that will be placed first into the 2 new nodes
 
-  // QS1: Apply algorithm PickSeeds to choose two entries to be the first elemetns fo the groups
-  // std::array<Eid, 2> seeds = pick_seeds(n, r);
+  // QS1: Apply algorithm PickSeeds to choose two entries to be the first
+  // elemetns fo the groups std::array<Eid, 2> seeds = pick_seeds(n, r);
 
   // QS1: Sssign each to a group
   // set_node_entry(groups[0], 0, seeds[0]);
@@ -392,9 +389,9 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
 
   // naively move half the entries into the new branch
 
-  Node& node = get_node(n);
+  Node &node = get_node(n);
   int half = node.count / 2;
-  for(int i=half; i< node.count; ++i) {
+  for (int i = half; i < node.count; ++i) {
     plain_insert(nn, get_node_entry(n, i));
   }
   plain_insert(nn, e); // adding also the new entry
@@ -452,12 +449,13 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
 PRE std::array<Eid, 2> QUAL::pick_seeds(Nid n, Rid r) {
   std::array<Eid, 2> res;
 
-
   // TODO
   res[0] = get_node_entry(n, 0);
   res[1] = get_node_entry(n, 1);
 
-  // [Find extreme rectangles along all dimensions] Along each dimension, find the entry whose rectangle has the highest low side, and the one with the lowest high side. Record the separation.
+  // [Find extreme rectangles along all dimensions] Along each dimension, find
+  // the entry whose rectangle has the highest low side, and the one with the
+  // lowest high side. Record the separation.
 
   // [Adjust for shape of the rectangle cluster] Normalize the
   // separations by dividing by the width of the entire set along the
@@ -507,11 +505,11 @@ PRE ELEMTYPE QUAL::rect_volume(Rid r) {
 
 PRE size_t QUAL::size() { return m_size; }
 
-PRE std::vector<DATATYPE> QUAL::search(const Vec &low,const Vec &high) {
+PRE std::vector<DATATYPE> QUAL::search(const Vec &low, const Vec &high) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
   std::vector<DATATYPE> res;
-  for(int i=0; i<m_dims; ++i) {
+  for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(m_temp_rect, i) = low[i];
     rect_high_ref(m_temp_rect, i) = high[i];
   }
