@@ -340,12 +340,13 @@ PRE void QUAL::update_entry_rect(Eid e) {
 }
 
 PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
-  // cout << "insert " << pp(data) << endl;
   Eid e = make_entry_id(); // also sets the rect
   Entry &entry = get_entry(e);
   entry.data_id = make_data_id();
   set_data(entry.data_id, data);
   Rid r = entry.rect_id;
+
+  cout << "--insert " << e << " " <<  entry.data_id << " " << pp(data) << endl;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -361,24 +362,22 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
-  const DATATYPE& data = get_data(get_entry(e).data_id);
+  Did did = get_entry(e).data_id;
   if (node.count < M) {
-    cout << "insert plain : " << pp(data) << " " << n << endl;
+    cout << "insert plain : " << e << did << " " << n << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    cout << "insert split : " << pp(data) << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
+    cout << "insert split : " << e << did << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
     cout << node_to_string(n) << endl << node_to_string(nn) << endl;
-    // exit(0);
-    // TODO
-    //
-    // We need to divided the M+1 entries between two nodes.  We
-    // need to partition the set of M+1 entries into two groups, one
-    // for each node.
-    // ASSERT(0);
   }
+  // NB: nn (new node - afte split_and_insert) isn't yet a part of the tree.
+  // adjust_tree is the one that adds it, by iterating through the parents (traversal)
+  
   adjust_tree(n, nn, e, traversal);
+  
+  return nn;
 }
 
 PRE void QUAL::plain_insert(Nid n, Eid e) {
@@ -425,7 +424,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
       std::remove_if(split_entries.begin(), split_entries.end(),
                      [&seeds](const Eid &o) { return o.id == seeds[1].id; }));
 
-  cout << "--- seeds " << seeds[0] << ", " << seeds[1] << endl << node_to_string(n) << endl << node_to_string(nn) << endl << " split entries " << pp(split_entries) << endl;;
+  // cout << "--- seeds " << seeds[0] << ", " << seeds[1] << endl << node_to_string(n) << endl << node_to_string(nn) << endl << " split entries " << pp(split_entries) << endl;;
 
   ASSERT(split_entries.size() == M-1); // M+1 -2
 
@@ -495,14 +494,26 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
 
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
                            const std::vector<Nid> &traversal) {
+  // cout << "adjust tree " << n << " " << nn << endl;
   for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
     Nid parent = *it;
-    cout << "adjusting parent " << parent << endl;
+    // cout << "adjusting parent " << parent << endl;
+    if(nn) {
+      Eid ne = make_entry_id();
+      Entry& new_entry = get_entry(ne);
+      new_entry.child_id = nn;
+      nn = insert(parent, ne, traversal);
+      // cout << "after insert on parent, new node " << nn << endl;
+      cout << to_string() << endl;
+    }
     // TODO adjusting MBR
     // TODO if nn, try to insert to parent
   }
   if (n == m_root_id && nn) {
-    cout << "root split" << endl;
+    // cout << "root split" << endl;
+    // important: make_node_id before getting nodes
+    // otherwise, references might get invalid
+    Nid new_root_id = make_node_id();
     Node &root = get_node(n);
     Node &new_node = get_node(nn);
     ASSERT(root.height == new_node.height);
@@ -517,7 +528,6 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     new_node_entry.child_id = nn;
     update_entry_rect(new_node_e);
 
-    Nid new_root_id = make_node_id();
     Node &new_root = get_node(new_root_id);
     new_root.height = root.height + 1;
     plain_insert(new_root_id, old_root_e);
@@ -664,7 +674,7 @@ PRE std::string QUAL::node_to_string(Nid nid, int level) {
   for (int i = 0; i < level; ++i) {
     indent += "  ";
   }
-  os << indent << level << ":" << nid << endl;
+  os << indent << nid << " height " << node.height << " level " << level << endl;
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
@@ -674,7 +684,12 @@ PRE std::string QUAL::node_to_string(Nid nid, int level) {
       os << " data: " << pp(get_data(entry.data_id)) << endl;
     } else {
       os << " child: " << entry.child_id << endl;
-      os << node_to_string(entry.child_id, level + 1);
+      // TODO remove, or, assert entry.child_id
+      if(!entry.child_id) {
+        os << ".. no child?? node height " << node.height << endl;
+      } else {
+        os << node_to_string(entry.child_id, level + 1);
+      }
     }
   }
   return os.str();
