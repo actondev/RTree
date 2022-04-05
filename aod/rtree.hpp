@@ -402,9 +402,9 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
     split_entries[i] = get_node_entry(n, i);
   }
   split_entries[M] = e; // the new entry
-  const Entry &entry = get_entry(e);
   std::array<Eid, 2> seeds = pick_seeds(split_entries);
-  node.count = 0; // TODO free up entries
+
+  node.count = 0; // TODO free up entries (entry ids) to be reused
   new_node.count = 0;
 
   plain_insert(n, seeds[0]);
@@ -424,8 +424,6 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
       std::remove_if(split_entries.begin(), split_entries.end(),
                      [&seeds](const Eid &o) { return o.id == seeds[1].id; }));
 
-  // cout << "--- seeds " << seeds[0] << ", " << seeds[1] << endl << node_to_string(n) << endl << node_to_string(nn) << endl << " split entries " << pp(split_entries) << endl;;
-
   ASSERT(split_entries.size() == M-1); // M+1 -2
 
   ELEMTYPE biggestDiff;
@@ -441,6 +439,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
         node.count < max_fill &&
         new_node.count < max_fill
         ) {
+    biggestDiff = (ELEMTYPE)-1;
     for(int i=0; i<split_entries.size(); ++i) {
       const Entry& entry = get_entry(split_entries[i]);
       Rid r = entry.rect_id;
@@ -471,7 +470,6 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
     plain_insert(groups[betterGroup], split_entries[entry_index]);
     split_entries.erase(split_entries.begin() + entry_index);
   }
-
   // exited early cause one node filled too much
   if(node.count + new_node.count < M+1 ) {
     Nid to_fill;
