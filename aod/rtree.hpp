@@ -88,6 +88,7 @@ private:
     Rid groups_rects[2];             // each group's MBR
     ELEMTYPE groups_areas[2];        // area covered by each group's MBR
     Rid temp_rects[2]; // temporary rect for each group, comparing growth
+    std::vector<ELEMTYPE> entries_areas;
   };
 
   /// max entries per node
@@ -199,7 +200,7 @@ private:
   /// new node id
   Nid split_and_insert(Nid n, Eid e);
   void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid> &traversal);
-  std::array<Eid, 2> pick_seeds(Nid n, Rid r);
+  std::array<Eid, 2> pick_seeds(const std::vector<Eid> &entries);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
   bool rects_overlap(Rid, Rid);
@@ -228,11 +229,6 @@ private:
 
   // TODO signatures
 
-  /// Select two entries to be the first elements of the group
-  void pick_seeds();
-  /// Select one remaining entry for classification in a group.
-  void pick_next();
-
   void combine_rects(Rid a, Rid b, Rid dst);
   void update_entry_rect(Eid e);
 };
@@ -251,6 +247,8 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
 
   m_partition.temp_rects[0] = make_rect_id();
   m_partition.temp_rects[1] = make_rect_id();
+
+  m_partition.entries_areas.resize(M+1);
 }
 
 PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) {
@@ -401,7 +399,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   }
   split_entries[M] = e; // the new entry
   const Entry &entry = get_entry(e);
-  std::array<Eid, 2> seeds = pick_seeds(n, entry.rect_id);
+  std::array<Eid, 2> seeds = pick_seeds(split_entries);
   node.count = 0; // TODO free up entries
   new_node.count = 0;
 
@@ -535,46 +533,31 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
 
 /// Linear Pick Seeds. Pick first entry for each group. We get 2
 /// groups after splittinga node.
-PRE std::array<Eid, 2> QUAL::pick_seeds(Nid n, Rid r) {
+PRE std::array<Eid, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
   std::array<Eid, 2> res;
-
-  // TODO
-  res[0] = get_node_entry(n, 0);
-  res[1] = get_node_entry(n, 1);
-
-  // [Find extreme rectangles along all dimensions] Along each dimension, find
-  // the entry whose rectangle has the highest low side, and the one with the
-  // lowest high side. Record the separation.
-
-  // [Adjust for shape of the rectangle cluster] Normalize the
-  // separations by dividing by the width of the entire set along the
-  // corresponding dimension
-
-  /**
-     From RTree
+  ASSERT(entries.size() == M+1);
 
   int seed0 = 0, seed1 = 0;
-  ELEMTYPEREAL worst, waste;
-  ELEMTYPEREAL area[MAXNODES + 1];
-
-  for (int index = 0; index < a_parVars->m_total; ++index) {
-    area[index] = CalcRectVolume(&a_parVars->m_branchBuf[index].m_rect);
+  ELEMTYPE worst, waste;
+  worst = std::numeric_limits<ELEMTYPE>::min();
+  for(int i=0; i< entries.size(); ++i) {
+    m_partition.entries_areas[i] = rect_volume(get_entry(entries[i]).rect_id);
   }
 
-  worst = -a_parVars->m_coverSplitArea - 1;
-  for (int indexA = 0; indexA < a_parVars->m_total - 1; ++indexA) {
-    for (int indexB = indexA + 1; indexB < a_parVars->m_total; ++indexB) {
-      Rect oneRect = CombineRect(&a_parVars->m_branchBuf[indexA].m_rect,
-                                 &a_parVars->m_branchBuf[indexB].m_rect);
-      waste = CalcRectVolume(&oneRect) - area[indexA] - area[indexB];
+  for (int i = 0; i < entries.size() - 1; ++i) {
+    for (int j = i + 1; j < entries.size(); ++j) {
+      combine_rects(get_entry(entries[i]).rect_id, get_entry(entries[j]).rect_id, m_temp_rect);
+      waste = rect_volume(m_temp_rect) - m_partition.entries_areas[i] - m_partition.entries_areas[j];
       if (waste > worst) {
         worst = waste;
-        seed0 = indexA;
-        seed1 = indexB;
+        seed0 = i;
+        seed1 = j;
       }
     }
   }
-   */
+  ASSERT(seed0 != seed1);
+  res[0] = entries[seed0];
+  res[1] = entries[seed1];
 
   return res;
 }
