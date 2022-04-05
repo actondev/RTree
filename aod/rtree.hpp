@@ -190,6 +190,7 @@ private:
   }
   std::string rect_to_string(Rid);
   std::string node_to_string(Nid nid, int level = 0);
+  void node_to_string(Nid nid, int level, std::ostream&);
 
   void copy_rect(Rid src, Rid dst) {
     for (auto i = 0; i < m_dims; ++i) {
@@ -204,7 +205,9 @@ public:
   void insert(const Vec &low, const Vec &high, const DATATYPE &data);
   size_t size();
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
+  void search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results);
   std::string to_string();
+  void to_string(std::ostream&);
 
 private:
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
@@ -359,7 +362,7 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   set_data(entry.data_id, data);
   Rid r = entry.rect_id;
 
-  cout << "--insert " << e << " " <<  entry.data_id << " " << pp(data) << endl;
+  // cout << "--insert " << e << " " <<  entry.data_id << " " << pp(data) << endl;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -377,13 +380,13 @@ PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal) {
   Node &node = get_node(n);
   Did did = get_entry(e).data_id;
   if (node.count < M) {
-    cout << "insert plain : " << e << did << " " << n << endl;
+    // cout << "insert plain : " << e << did << " " << n << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    cout << "insert split : " << e << did << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
-    cout << node_to_string(n) << endl << node_to_string(nn) << endl;
+    // cout << "insert split : " << e << did << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
+    // cout << node_to_string(n) << endl << node_to_string(nn) << endl;
   }
   // NB: nn (new node - afte split_and_insert) isn't yet a part of the tree.
   // adjust_tree is the one that adds it, by iterating through the parents (traversal)
@@ -428,6 +431,16 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   copy_rect(get_entry(seeds[1]).rect_id, m_partition.groups_rects[1]);
   m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
   m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
+
+  // TODO cover_split(_area)
+  /**
+  a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
+  for (int index = 1; index < MAXNODES + 1; ++index) {
+    a_parVars->m_coverSplit = CombineRect(
+        &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
+  }
+  a_parVars->m_coverSplitArea = CalcRectVolume(&a_parVars->m_coverSplit);
+   */
 
   // TODO implement Eid == operator
   split_entries.erase(
@@ -505,22 +518,23 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
 
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
                            const std::vector<Parent> &parents) {
-  cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) << endl;
+  Rid r = get_entry(e).rect_id;
+  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) << endl;
   for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
     Parent parent = *it;
     const Node& parent_node = get_node(parent.node);
-    if(parent_node.height == 0) continue;
-    // nn = parent.node;
-    // cout << "adjusting parent " << parent << endl;
-
+    if(parent_node.height == 0) {
+      continue;
+    }
     if(nn) {
       Eid ne = make_entry_id();
       Entry& new_entry = get_entry(ne);
       new_entry.child_id = nn;
+      update_entry_rect(ne);
       nn = insert(parent.node, ne, parents);
-      // cout << "after insert on parent, new node " << nn << endl;
-      // cout << to_string() << endl;
     }
+    const Entry& parent_entry = get_entry(parent.entry);
+    combine_rects(parent_entry.rect_id, r, parent_entry.rect_id);
     // TODO adjusting MBR
     // TODO if nn, try to insert to parent
   }
@@ -549,17 +563,8 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     plain_insert(new_root_id, new_node_e);
 
     m_root_id = new_root_id;
-    cout << "root split done, new root " << m_root_id << ", children " << n << ", " << nn
-         << endl;
-
-    // static std::vector<Nid> no_traversal;
-    // Nid new_root = insert(m_root, Eid e)
-    // root split
-    // 1 create entry with rect covering nn (new node)
-    // Eid new_entry = make_entry_id(); // TODO make_entry_from_node
-    // 2
-    // Nid new_root = split_and_insert(n, new_entry);
-    // TODO adjust MBR
+    // cout << "root split done, new root " << m_root_id << ", children " << n << ", " << nn
+    //      << endl;
   }
 }
 
@@ -569,8 +574,9 @@ PRE std::array<Eid, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
   std::array<Eid, 2> res;
   ASSERT(entries.size() == M+1);
 
+  // TODO sth wrogn with worst & waste comparison
   int seed0 = 0, seed1 = 0;
-  ELEMTYPE worst, waste;
+  ELEMTYPE worst = -1, waste;
   worst = std::numeric_limits<ELEMTYPE>::min();
   for(int i=0; i< entries.size(); ++i) {
     m_partition.entries_areas[i] = rect_volume(get_entry(entries[i]).rect_id);
@@ -610,22 +616,26 @@ PRE ELEMTYPE QUAL::rect_volume(Rid r) {
 PRE size_t QUAL::size() { return m_size; }
 
 PRE std::vector<DATATYPE> QUAL::search(const Vec &low, const Vec &high) {
+  std::vector<DATATYPE> res;
+
+  search(low, high, res);
+  return res;
+}
+
+PRE void QUAL::search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
-  std::vector<DATATYPE> res;
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(m_temp_rect, i) = low[i];
     rect_high_ref(m_temp_rect, i) = high[i];
   }
-  SearchCb cb = [&res](const DATATYPE &data) {
-    res.push_back(data);
+  SearchCb cb = [&results](const DATATYPE &data) {
+    results.push_back(data);
     return true;
   };
 
   int found_count = 0;
   search(m_root_id, m_temp_rect, found_count, cb);
-
-  return res;
 }
 
 PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
@@ -682,37 +692,53 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
   }
   return true;
 }
-PRE std::string QUAL::node_to_string(Nid nid, int level) {
-  std::ostringstream os;
+PRE void QUAL::node_to_string(Nid nid, int level, std::ostream &os) {
   Node node = get_node(nid);
   std::string indent;
   for (int i = 0; i < level; ++i) {
     indent += "  ";
   }
-  os << indent << nid << " height " << node.height << " level " << level << endl;
+  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" level=\"" << level << "\" >" << endl;
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
     Rid r = entry.rect_id;
-    os << indent << e << " " << r << rect_to_string(r);
+    os << "<Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\"" << rect_to_string(r) << "\" />" << endl;
+    // os << indent << e << " " << r << rect_to_string(r);
     if (node.height == 0) {
       Did did = entry.data_id;
-      os << " data: " << (did ? pp(get_data(did)) : " no data ??") << endl;
+      os << "<Data id=\"" << did.id << "\"";
+      if(did) {
+        os << " data=\"" << pp(get_data(did)) << "\"";
+      }
+      os << "/>" << endl;
     } else {
-      os << " child: " << entry.child_id << endl;
+      os << "<Child id=\"" << entry.child_id.id << "\" />" << endl;
       // TODO remove, or, assert entry.child_id
       if(!entry.child_id) {
         os << ".. no child?? node height " << node.height << endl;
       } else {
-        os << node_to_string(entry.child_id, level + 1);
+        node_to_string(entry.child_id, level + 1, os);
       }
     }
   }
-  return os.str();
+  os << "</Node>" << endl;
+};
+
+PRE std::string QUAL::node_to_string(Nid nid, int level) {
+  std::ostringstream os;
+  node_to_string(nid, level, os);
+    return os.str();
 };
 
 PRE std::string QUAL::to_string() {
-  return node_to_string(m_root_id, 0);
+  std::ostringstream os;
+  to_string(os);
+  return os.str();
+}
+
+PRE void QUAL::to_string(std::ostream &os) {
+  node_to_string(m_root_id, 0, os);
 }
 
 PRE std::string QUAL::rect_to_string(Rid rid) {
