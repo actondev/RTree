@@ -48,6 +48,11 @@ struct Entry {
   Did data_id;
 };
 
+struct Parent {
+  Nid node;
+  Eid entry;
+};
+
 struct Node {
   bool is_internal() { return (height > 0); } // Not a leaf, but a internal node
   bool is_leaf() { return (height == 0); }    // A leaf, contains data
@@ -69,6 +74,11 @@ std::ostream &operator<<(std::ostream &os, const Nid &id) {
 
 std::ostream &operator<<(std::ostream &os, const Rid &id) {
   os << "Rid{" << id.id << "}";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Parent &p) {
+  os << "Parent{" << p.node << "," << p.entry << "}";
   return os;
 }
 
@@ -109,7 +119,7 @@ private:
   Rid m_temp_rect;
   Partition m_partition;
 
-  std::vector<Nid> m_traversal;
+  std::vector<Parent> m_traversal;
 
   std::vector<ELEMTYPE> m_rects_low;
   std::vector<ELEMTYPE> m_rects_high;
@@ -200,18 +210,18 @@ private:
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
   /// new node id
   Nid split_and_insert(Nid n, Eid e);
-  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid> &traversal);
+  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &traversal);
   std::array<Eid, 2> pick_seeds(const std::vector<Eid> &entries);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
   bool rects_overlap(Rid, Rid);
 
   /// insert entry into leaf node: if a split occured, returns a valid new node
-  Nid insert(Nid, Eid, const std::vector<Nid> &traversal);
+  Nid insert(Nid, Eid, const std::vector<Parent> &traversal);
   void plain_insert(Nid, Eid);
-  Nid choose_leaf(Rid r, std::vector<Nid> &traversal);
-  Nid choose_node(Nid n, Rid r, int height, std::vector<Nid> &traversal);
-  Nid choose_subtree(Nid n, Rid r);
+  Nid choose_leaf(Rid r, std::vector<Parent> &traversal);
+  Nid choose_node(Nid n, Rid r, int height, std::vector<Parent> &traversal);
+  Eid choose_subtree(Nid n, Rid r);
 
   /// Ascend from leaf node L to the root, adjusting rectangles and
   /// propagating node splits as necessary
@@ -252,25 +262,29 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
   m_partition.entries_areas.resize(M+1);
 }
 
-PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) {
+PRE Nid QUAL::choose_leaf(Rid r, std::vector<Parent> &traversal) {
   return choose_node(m_root_id, r, 0, traversal);
 }
 
 PRE Nid QUAL::choose_node(Nid n, Rid r, int height,
-                          std::vector<Nid> &traversal) {
+                          std::vector<Parent> &traversal) {
   ASSERT(n);
   ASSERT(r);
   Node &node = get_node(n);
   if (node.height == height) {
     return n;
   }
-  traversal.push_back(n);
-  Nid subtree = choose_subtree(n, r);
+  Eid subtree = choose_subtree(n, r);
+  Nid child = get_entry(subtree).child_id;
+  Parent p;
+  p.entry = subtree;
+  p.node = child;
+  traversal.push_back(p);
   ASSERT(subtree);
-  return choose_node(subtree, r, height, traversal);
+  return choose_node(child, r, height, traversal);
 }
 
-PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
+PRE Eid QUAL::choose_subtree(Nid n, Rid r) {
   // CL3. If N is not a leaf, let F be the entry in N whose rectangle
   // FI needs least enlargment to include EI. Resolved ties by
   // choosing the entry with the rectangle of smallest area.
@@ -306,8 +320,7 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
       best_incr = increase;
     }
   }
-  Entry &entry = get_entry(best);
-  return entry.child_id;
+  return best;
 }
 
 PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
@@ -359,7 +372,7 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   ++m_size;
 }
 
-PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid> &traversal) {
+PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
   Did did = get_entry(e).data_id;
@@ -491,18 +504,22 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
 }
 
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
-                           const std::vector<Nid> &traversal) {
-  // cout << "adjust tree " << n << " " << nn << endl;
-  for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
-    Nid parent = *it;
+                           const std::vector<Parent> &parents) {
+  cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) << endl;
+  for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
+    Parent parent = *it;
+    const Node& parent_node = get_node(parent.node);
+    if(parent_node.height == 0) continue;
+    // nn = parent.node;
     // cout << "adjusting parent " << parent << endl;
+
     if(nn) {
       Eid ne = make_entry_id();
       Entry& new_entry = get_entry(ne);
       new_entry.child_id = nn;
-      nn = insert(parent, ne, traversal);
+      nn = insert(parent.node, ne, parents);
       // cout << "after insert on parent, new node " << nn << endl;
-      cout << to_string() << endl;
+      // cout << to_string() << endl;
     }
     // TODO adjusting MBR
     // TODO if nn, try to insert to parent
@@ -677,9 +694,10 @@ PRE std::string QUAL::node_to_string(Nid nid, int level) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
     Rid r = entry.rect_id;
-    os << indent << e << " " << rect_to_string(r);
+    os << indent << e << " " << r << rect_to_string(r);
     if (node.height == 0) {
-      os << " data: " << pp(get_data(entry.data_id)) << endl;
+      Did did = entry.data_id;
+      os << " data: " << (did ? pp(get_data(did)) : " no data ??") << endl;
     } else {
       os << " child: " << entry.child_id << endl;
       // TODO remove, or, assert entry.child_id
