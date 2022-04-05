@@ -239,16 +239,18 @@ PRE QUAL::rtree(int dimensions)
 
 PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) { return choose_node(m_root_id, r, 0, traversal); }
 
-PRE Nid QUAL::choose_node(Nid n, Rid r, int height, std::vector<Nid> &traversal) {
+PRE Nid QUAL::choose_node(Nid n, Rid r, int height,
+                          std::vector<Nid> &traversal) {
   ASSERT(n);
   ASSERT(r);
-  Node& node = get_node(n);
-  if(node.height == height) {
+  Node &node = get_node(n);
+  if (node.height == height) {
     return n;
   }
   traversal.push_back(n);
   Nid subtree = choose_subtree(n, r);
-  return choose_node(n, r, height, traversal);
+  ASSERT(subtree);
+  return choose_node(subtree, r, height, traversal);
 }
 
 PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
@@ -378,22 +380,45 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   return nn;
 }
 
-PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Nid>& traversal) {
+PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
+                           const std::vector<Nid> &traversal) {
   for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
     Nid parent = *it;
     cout << "adjusting parent " << parent << endl;
     // TODO adjusting MBR
   }
-  if(n == m_root_id && nn) {
+  if (n == m_root_id && nn) {
+    cout << "root split" << endl;
+    Node &root = get_node(n);
+    Node &new_node = get_node(nn);
+    ASSERT(root.height == new_node.height);
+
+    Eid old_root_e = make_entry_id(); // TODO rect: absorb root MBR
+    Entry &old_root_entry = get_entry(old_root_e);
+    old_root_entry.child_id = m_root_id;
+
+    Eid new_node_e = make_entry_id();
+    Entry &new_node_entry = get_entry(new_node_e);
+    new_node_entry.child_id = nn;
+
+    Nid new_root_id = make_node_id();
+    Node &new_root = get_node(new_root_id);
+    new_root.height = root.height + 1;
+    plain_insert(new_root_id, old_root_e);
+    plain_insert(new_root_id, new_node_e);
+
+    m_root_id = new_root_id;
+    cout << "root split done, new root" << m_root_id << ", children " << n << nn
+         << endl;
+
     // static std::vector<Nid> no_traversal;
     // Nid new_root = insert(m_root, Eid e)
     // root split
     // 1 create entry with rect covering nn (new node)
-    Eid new_entry = make_entry_id(); // TODO make_entry_from_node
+    // Eid new_entry = make_entry_id(); // TODO make_entry_from_node
     // 2
-    Nid new_root = split_and_insert(n, new_entry);
+    // Nid new_root = split_and_insert(n, new_entry);
     // TODO adjust MBR
-    
   }
 }
 
