@@ -82,6 +82,14 @@ template <class DATATYPE, class ELEMTYPE = double> class rtree {
   using SearchCb = std::function<bool(const DATATYPE &)>;
 
 private:
+  /// Helper struct used in partitioning M+1 entries into two groups
+  struct Partition {
+    std::vector<Eid> entries; // up to M+1
+    Rid groups_rects[2];             // each group's MBR
+    ELEMTYPE groups_areas[2];        // area covered by each group's MBR
+    Rid temp_rects[2]; // temporary rect for each group, comparing growth
+  };
+
   /// max entries per node
   const int M = 8; // max entries per node
 
@@ -98,6 +106,7 @@ private:
   id_t m_data_count = 0;
   Nid m_root_id;
   Rid m_temp_rect;
+  Partition m_partition;
 
   std::vector<Nid> m_traversal;
 
@@ -151,9 +160,7 @@ private:
     return m_data[did.id];
   };
 
-  Eid get_node_entry(Nid n, int idx) {
-    return m_node_entries[n.id * M + idx];
-  }
+  Eid get_node_entry(Nid n, int idx) { return m_node_entries[n.id * M + idx]; }
   void set_node_entry(Nid n, int idx, Eid e) {
     m_node_entries[n.id * M + idx] = e;
   }
@@ -171,6 +178,13 @@ private:
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
+
+  void copy_rect(Rid src, Rid dst) {
+    for (auto i = 0; i < m_dims; ++i) {
+      rect_low_ref(dst, i) = rect_low_ref(src, i);
+      rect_high_ref(dst, i) = rect_high_ref(src, i);
+    }
+  }
 
 public:
   rtree() = delete;
@@ -230,6 +244,13 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
   m_size = 0;
   m_root_id = make_node_id();
   m_temp_rect = make_rect_id();
+  m_partition.entries.resize(M + 1);
+
+  m_partition.groups_rects[0] = make_rect_id();
+  m_partition.groups_rects[1] = make_rect_id();
+
+  m_partition.temp_rects[0] = make_rect_id();
+  m_partition.temp_rects[1] = make_rect_id();
 }
 
 PRE Nid QUAL::choose_leaf(Rid r, std::vector<Nid> &traversal) {
@@ -292,23 +313,23 @@ PRE Nid QUAL::choose_subtree(Nid n, Rid r) {
 
 PRE void QUAL::combine_rects(Rid a, Rid b, Rid dst) {
   for (int i = 0; i < m_dims; i++) {
-    rect_low_ref(dst, i) =
-        Min(rect_low_ref(a, i), rect_low_ref(b, i));
-    rect_high_ref(dst, i) =
-        Max(rect_high_ref(a, i), rect_high_ref(b, i));
+    rect_low_ref(dst, i) = Min(rect_low_ref(a, i), rect_low_ref(b, i));
+    rect_high_ref(dst, i) = Max(rect_high_ref(a, i), rect_high_ref(b, i));
   }
 }
 
 PRE void QUAL::update_entry_rect(Eid e) {
-  const Entry& the_entry = get_entry(e);
+  const Entry &the_entry = get_entry(e);
   Rid r = the_entry.rect_id;
   Nid n = the_entry.child_id;
-  if(!n) return;
-  Node& node = get_node(n);
-  if(!node.count) return;
+  if (!n)
+    return;
+  Node &node = get_node(n);
+  if (!node.count)
+    return;
   // going through the child node entries
   Eid child_e = get_node_entry(n, 0);
-  const Entry& child_entry = get_entry(child_e);
+  const Entry &child_entry = get_entry(child_e);
   for (int i = 0; i < m_dims; i++) {
     rect_low_ref(r, i) = rect_low_ref(child_entry.rect_id, i);
     rect_high_ref(r, i) = rect_high_ref(child_entry.rect_id, i);
@@ -367,35 +388,103 @@ PRE void QUAL::plain_insert(Nid n, Eid e) {
 PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   // std::vector<Eid> entries;
   Nid nn = make_node_id();
-  // seends are the 2 entries that will be placed first into the 2 new nodes
-
-  // QS1: Apply algorithm PickSeeds to choose two entries to be the first
-  // elemetns fo the groups std::array<Eid, 2> seeds = pick_seeds(n, r);
-
-  // QS1: Sssign each to a group
-  // set_node_entry(groups[0], 0, seeds[0]);
-  // set_node_entry(groups[1], 0, seeds[1]);
-
-  // TODO picknext
-  // naive atm
-  // Node& node = get_node(n);
-  // for(int i=0; i< half; ++i) {
-  //   set_node_entry(groups[0], i+1, get_node_entry(n, i));
-  // }
-
-  // for (int i = half; i < node.count; ++i) {
-  //   set_node_entry(groups[1], (i-half)+1, get_node_entry(n, i));
-  // }
-
-  // naively move half the entries into the new branch
-
   Node &node = get_node(n);
-  int half = node.count / 2;
-  for (int i = half; i < node.count; ++i) {
-    plain_insert(nn, get_node_entry(n, i));
+  Node &new_node = get_node(nn);
+  ASSERT(node.count == M); // if node is not full, makes no sense being here
+
+  std::vector<Eid> &split_entries = m_partition.entries;
+  split_entries.clear();
+  split_entries.resize(M + 1);
+
+  for (int i = 0; i < node.count; ++i) {
+    split_entries[i] = get_node_entry(n, i);
   }
-  plain_insert(nn, e); // adding also the new entry
-  node.count = half;
+  split_entries[M] = e; // the new entry
+  const Entry &entry = get_entry(e);
+  std::array<Eid, 2> seeds = pick_seeds(n, entry.rect_id);
+  node.count = 0; // TODO free up entries
+  new_node.count = 0;
+
+  plain_insert(n, seeds[0]);
+  plain_insert(nn, seeds[1]);
+
+  // initializing helper rects
+  copy_rect(get_entry(seeds[0]).rect_id, m_partition.groups_rects[0]);
+  copy_rect(get_entry(seeds[1]).rect_id, m_partition.groups_rects[1]);
+  m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
+  m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
+
+  split_entries.erase(
+      std::remove_if(split_entries.begin(), split_entries.end(),
+                     [&seeds](const Eid &o) { return o == seeds[0]; }));
+  split_entries.erase(
+      std::remove_if(split_entries.begin(), split_entries.end(),
+                     [&seeds](const Eid &o) { return o == seeds[1]; }));
+
+  // copy_rect
+
+  ASSERT(split_entries.size() == M-1); // M+1 -2
+
+  ELEMTYPE biggestDiff;
+  int group, entry_index = 0, betterGroup = 0;
+  // existing node: group[0], new node: group[1]
+  Nid groups[2] = {n, nn};
+  int* groups_count[2] = {
+    &node.count,
+    &new_node.count
+  };
+  int max_fill = M+1-m;
+  while(!split_entries.empty() &&
+        node.count < max_fill &&
+        new_node.count < max_fill
+        ) {
+    for(int i=0; i<split_entries.size(); ++i) {
+      const Entry& entry = get_entry(split_entries[i]);
+      Rid r = entry.rect_id;
+      combine_rects(r, m_partition.groups_rects[0], m_partition.temp_rects[0]);
+      combine_rects(r, m_partition.groups_rects[1], m_partition.temp_rects[1]);
+      ELEMTYPE growth0 = rect_volume(m_partition.temp_rects[0]) - m_partition.groups_areas[0];
+      ELEMTYPE growth1 = rect_volume(m_partition.temp_rects[1]) - m_partition.groups_areas[1];
+      ELEMTYPE diff = growth1 - growth0;
+      if(diff > 0 ) {
+        group = 0;
+      } else {
+        group = 1;
+        diff = -diff;
+      }
+      if (diff > biggestDiff) {
+        biggestDiff = diff;
+        entry_index = i;
+        betterGroup = group;
+      } else if ((diff == biggestDiff) && (*groups_count[group] <
+                                           *groups_count[betterGroup])) {
+        entry_index = i;
+        betterGroup = group;
+      }
+    }
+    // put chose into the betterGroup
+    combine_rects(get_entry(split_entries[entry_index]).rect_id, m_partition.groups_rects[betterGroup], m_partition.groups_rects[betterGroup]);
+    m_partition.groups_areas[betterGroup] = rect_volume(m_partition.groups_rects[betterGroup]);
+    plain_insert(groups[betterGroup], split_entries[entry_index]);
+    split_entries.erase(split_entries.begin() + entry_index);
+  }
+
+  // exited early cause one node filled too much
+  if(node.count + new_node.count < M+1 ) {
+    Nid to_fill;
+    if(node.count >= max_fill) {
+      to_fill = nn;
+    } else {
+      to_fill = n;
+    }
+    for(const Eid& e : split_entries) {
+      plain_insert(to_fill, e);
+    }
+  }
+
+  ASSERT(node.count + new_node.count == M+1);
+  ASSERT(node.count >=m);
+  ASSERT(new_node.count >=m);
 
   return nn;
 }

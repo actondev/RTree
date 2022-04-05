@@ -565,7 +565,7 @@ TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
 }
 
 TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
-  const int size = 4;
+  const int size = 10;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   
