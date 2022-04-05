@@ -527,13 +527,16 @@ PRE std::vector<DATATYPE> QUAL::search(const Vec &low,const Vec &high) {
 }
 
 PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
-  Node& node = get_node(n);
-  if(node.is_internal()) {
-    for(int i=0; i<node.count; ++i) {
+  Node &node = get_node(n);
+  if (node.is_internal()) {
+    for (int i = 0; i < node.count; ++i) {
       Eid e = get_node_entry(n, i);
-      Entry& entry = get_entry(e);
-      if(rect_contains(r, entry.rect_id)) {
-        if(!search(entry.child_id, r, found_count, cb)) {
+      Entry &entry = get_entry(e);
+      // hm, though I could use rect_contains, but I may be asking for a big rect (search), not a specific rect I have inserted
+      // thus, the entry rect (in this case) can not contain the query rect
+      // TODO different modes for search? When asking for only one rect (or eg querying a point rect), then I should use rect_contains
+      if (rects_overlap(entry.rect_id ,r)) {
+        if (!search(entry.child_id, r, found_count, cb)) {
           // stop searching
           return false;
         }
