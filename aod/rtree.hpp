@@ -57,8 +57,8 @@ struct Node {
   Rid rect_id;    // TODO rect (mbr) for Node? not present in RTree code
 };
 
-std::ostream &operator<<(std::ostream &os, const Bid &id) {
-  os << "Bid{" << id.id << "}";
+std::ostream &operator<<(std::ostream &os, const Eid &id) {
+  os << "Eid{" << id.id << "}";
   return os;
 }
 
@@ -179,6 +179,7 @@ private:
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
+  std::string node_to_string(Nid nid, int level = 0);
 
   void copy_rect(Rid src, Rid dst) {
     for (auto i = 0; i < m_dims; ++i) {
@@ -360,12 +361,16 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Nid> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
+  const DATATYPE& data = get_data(get_entry(e).data_id);
   if (node.count < M) {
+    cout << "insert plain : " << pp(data) << " " << n << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    cout << "split : " << nn << "traversal " << pp(traversal) << endl;
+    cout << "insert split : " << pp(data) << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
+    cout << node_to_string(n) << endl << node_to_string(nn) << endl;
+    // exit(0);
     // TODO
     //
     // We need to divided the M+1 entries between two nodes.  We
@@ -412,14 +417,15 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
   m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
 
+  // TODO implement Eid == operator
   split_entries.erase(
       std::remove_if(split_entries.begin(), split_entries.end(),
-                     [&seeds](const Eid &o) { return o == seeds[0]; }));
+                     [&seeds](const Eid &o) { return o.id == seeds[0].id; }));
   split_entries.erase(
       std::remove_if(split_entries.begin(), split_entries.end(),
-                     [&seeds](const Eid &o) { return o == seeds[1]; }));
+                     [&seeds](const Eid &o) { return o.id == seeds[1].id; }));
 
-  // copy_rect
+  cout << "--- seeds " << seeds[0] << ", " << seeds[1] << endl << node_to_string(n) << endl << node_to_string(nn) << endl << " split entries " << pp(split_entries) << endl;;
 
   ASSERT(split_entries.size() == M-1); // M+1 -2
 
@@ -493,6 +499,7 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     Nid parent = *it;
     cout << "adjusting parent " << parent << endl;
     // TODO adjusting MBR
+    // TODO if nn, try to insert to parent
   }
   if (n == m_root_id && nn) {
     cout << "root split" << endl;
@@ -517,7 +524,7 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     plain_insert(new_root_id, new_node_e);
 
     m_root_id = new_root_id;
-    cout << "root split done, new root" << m_root_id << ", children " << n << nn
+    cout << "root split done, new root " << m_root_id << ", children " << n << ", " << nn
          << endl;
 
     // static std::vector<Nid> no_traversal;
@@ -650,35 +657,31 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
   }
   return true;
 }
+PRE std::string QUAL::node_to_string(Nid nid, int level) {
+  std::ostringstream os;
+  Node node = get_node(nid);
+  std::string indent;
+  for (int i = 0; i < level; ++i) {
+    indent += "  ";
+  }
+  os << indent << level << ":" << nid << endl;
+  for (int i = 0; i < node.count; i++) {
+    Eid e = get_node_entry(nid, i);
+    Entry entry = get_entry(e);
+    Rid r = entry.rect_id;
+    os << indent << e << " " << rect_to_string(r);
+    if (node.height == 0) {
+      os << " data: " << pp(get_data(entry.data_id)) << endl;
+    } else {
+      os << " child: " << entry.child_id << endl;
+      os << node_to_string(entry.child_id, level + 1);
+    }
+  }
+  return os.str();
+};
 
 PRE std::string QUAL::to_string() {
-  std::ostringstream os;
-
-  std::function<void(Nid, int)> fn =
-      [&](Nid nid, int level) {
-        Node node = get_node(nid);
-        std::string indent;
-        for (int i = 0; i < level; ++i) {
-          indent += "  ";
-        }
-        os << indent << level << ":" << nid << endl;
-        for (int i = 0; i < node.count; i++) {
-          Eid e = get_node_entry(nid, i);
-          Entry entry = get_entry(e);
-          Rid r = entry.rect_id;
-          os << indent << e << " " << rect_to_string(r);
-          if(node.height == 0) {
-            os << " data: " << pp(get_data(entry.data_id)) << endl;
-          } else {
-            os << " child: " << entry.child_id << endl;
-            fn(entry.child_id, level + 1);
-          }
-        }
-      };
-
-
-  fn(m_root_id, 0);
-  return os.str();
+  return node_to_string(m_root_id, 0);
 }
 
 PRE std::string QUAL::rect_to_string(Rid rid) {
