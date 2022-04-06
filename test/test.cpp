@@ -581,7 +581,6 @@ TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test][FIXME]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-
 TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
   const int size = 4;
   auto grid = make_grid(size);
@@ -610,7 +609,7 @@ TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
 }
 
 TEST_CASE("aod rtree test: 4x4", "[aod::rtree][basic test]") {
-  const int size = 3;
+  const int size = 4;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   

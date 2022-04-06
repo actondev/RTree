@@ -22,7 +22,7 @@ struct Id {
   Id() : Id(nullid){};
   Id(const Id &other) : Id(other.id){};
   Id(id_t id) : id{id} {}
-  friend bool operator==(const Id& lhs, const Id& rhs) {
+  friend bool operator==(const Id &lhs, const Id &rhs) {
     return lhs.id == rhs.id;
   }
 };
@@ -80,6 +80,11 @@ std::ostream &operator<<(std::ostream &os, const Rid &id) {
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, const Did &id) {
+  os << "Did{" << id.id << "}";
+  return os;
+}
+
 std::ostream &operator<<(std::ostream &os, const Parent &p) {
   os << "Parent{" << p.node << "," << p.entry << "}";
   return os;
@@ -94,12 +99,12 @@ template <class DATATYPE, class ELEMTYPE = double> class rtree {
   using Predicate = std::function<bool(const DATATYPE &)>;
   using SearchCb = std::function<bool(const DATATYPE &)>;
 
- public:
+public:
   struct Xml {
-    rtree* tree;
+    rtree *tree;
     int spaces = 4;
     Xml() = delete;
-    Xml(rtree* tree): tree{tree} {}
+    Xml(rtree *tree) : tree{tree} {}
     friend std::ostream &operator<<(std::ostream &os, const Xml &o) {
       os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
          << endl;
@@ -107,20 +112,19 @@ template <class DATATYPE, class ELEMTYPE = double> class rtree {
       return os;
     }
   };
-  
+
 private:
-  
   /// Helper struct used in partitioning M+1 entries into two groups
   struct Partition {
     std::vector<Eid> entries; // up to M+1
-    Rid groups_rects[2];             // each group's MBR
-    ELEMTYPE groups_areas[2];        // area covered by each group's MBR
-    Rid temp_rects[2]; // temporary rect for each group, comparing growth
+    Rid groups_rects[2];      // each group's MBR
+    ELEMTYPE groups_areas[2]; // area covered by each group's MBR
+    Rid temp_rects[2];        // temporary rect for each group, comparing growth
     std::vector<ELEMTYPE> entries_areas;
   };
 
-  /// max entries per node
-  const int M = 4; // max entries per node
+  /// max entries per node (best 8?)
+  const int M = 8;
 
   /// min entries per node. Could be hardcoded 2 as well, the paper
   /// shows good performance with hardcoded 2 as well
@@ -207,8 +211,8 @@ private:
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
-  std::string node_to_string(Nid nid, int level = 0);
-  void node_to_string(Nid nid, int level, int spaces, std::ostream&);
+  std::string node_to_string(Nid nid, int level = 0, int spaces = 4);
+  void node_to_string(Nid nid, int level, int spaces, std::ostream &);
 
   void copy_rect(Rid src, Rid dst) {
     for (auto i = 0; i < m_dims; ++i) {
@@ -225,10 +229,8 @@ public:
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
   void search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results);
   std::string to_string();
-  void to_string(int spaces, std::ostream&);
-  Xml to_xml() {
-    return Xml(this);
-  }
+  void to_string(int spaces, std::ostream &);
+  Xml to_xml() { return Xml(this); }
 
 private:
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
@@ -237,7 +239,7 @@ private:
   void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &traversal);
   std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
-                     const std::array<int, 2>& seeds);
+                          const std::array<int, 2> &seeds);
   void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
@@ -286,10 +288,15 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
   m_partition.temp_rects[0] = make_rect_id();
   m_partition.temp_rects[1] = make_rect_id();
 
-  m_partition.entries_areas.resize(M+1);
+  m_partition.entries_areas.resize(M + 1);
 }
 
 PRE Nid QUAL::choose_leaf(Rid r, std::vector<Parent> &traversal) {
+  // Eid subtree = choose_subtree(n, r);
+  // Nid child = get_entry(subtree).child_id;
+  Parent p;
+  p.node = m_root_id;
+  traversal.push_back(p);
   return choose_node(m_root_id, r, 0, traversal);
 }
 
@@ -380,14 +387,15 @@ PRE void QUAL::update_entry_rect(Eid e) {
 }
 
 PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
-  ++m_size; // for debug, I read it in insert/split functions
+  ++m_size;                // for debug, I read it in insert/split functions
   Eid e = make_entry_id(); // also sets the rect
   Entry &entry = get_entry(e);
   entry.data_id = make_data_id();
   set_data(entry.data_id, data);
   Rid r = entry.rect_id;
 
-  // cout << "--insert " << e << " " <<  entry.data_id << " " << pp(data) << endl;
+  // cout << "--insert " << e << " " <<  entry.data_id << " " << pp(data) <<
+  // endl;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -402,21 +410,28 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
-  Did did = get_entry(e).data_id;
+  const Entry& entry = get_entry(e);
+  // Did did = get_entry(e).data_id;
+  // cout << "insert " << n << e << ": data " << entry.data_id << " child " << entry.child_id << " traversal " << pp(traversal) << endl;
+  if(entry.child_id) {
+    // cout << " inserting entry with child!: " << endl << node_to_string(entry.child_id) << endl;
+  }
   if (node.count < M) {
     // cout << "insert plain : " << e << did << " " << n << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    // cout << "insert split : " << e << did << " " << n << ", " << nn << " traversal " << pp(traversal) << endl;
-    // cout << node_to_string(n) << endl << node_to_string(nn) << endl;
+    // cout << "insert split " << e << did << " " << n << ", " << nn << "
+    // traversal " << pp(traversal) << endl; cout << node_to_string(n) << endl
+    // << node_to_string(nn) << endl;
   }
   // NB: nn (new node - afte split_and_insert) isn't yet a part of the tree.
-  // adjust_tree is the one that adds it, by iterating through the parents (traversal)
-  
+  // adjust_tree is the one that adds it, by iterating through the parents
+  // (traversal)
+
   adjust_tree(n, nn, e, traversal);
-  
+
   return nn;
 }
 
@@ -428,6 +443,13 @@ PRE void QUAL::plain_insert(Nid n, Eid e) {
 }
 
 PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
+  // cout << ">>> split and insert " << n << e << endl;
+  // cout << node_to_string(n) << endl;
+  const Entry& entry = get_entry(e);
+  if(entry.child_id) {
+    // cout << " :: split and insert: entry " << e  << " has child!" << endl;
+    // cout << node_to_string(entry.child_id) << endl;
+  }
   // std::vector<Eid> entries;
   Nid nn = make_node_id();
   Node &node = get_node(n);
@@ -443,6 +465,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
     entries[i] = get_node_entry(n, i);
   }
   entries[M] = e; // the new entry
+  // cout << " entries: " << pp(entries) << endl;
   std::array<int, 2> seeds = pick_seeds(entries);
 
   node.count = 0; // TODO free up entries (entry ids) to be reused
@@ -452,22 +475,19 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   // distribute_entries(n, nn, entries, seeds);
   distribute_entries_naive(n, nn, entries);
 
-  // done
+  // cout << ":: distributed entries" << endl;
+  // cout << node_to_string(n) << endl << node_to_string(nn) << endl;
+  // cout << "<<< split";
   ASSERT(node.count + new_node.count == M + 1);
-  ASSERT(node.height == new_node.height);
   ASSERT(node.count >= m);
   ASSERT(new_node.count >= m);
-
-  cout << ">>> split nodes, tree size " << m_size << endl;
-  node_to_string(n, 0, 4, std::cout);
-  node_to_string(nn, 0, 4, std::cout);
-  cout << "<<< split nodes" << endl;
+  
+  // cout << "<<< split and insert" << endl;
   return nn;
 }
 
-
 PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
-                        const std::array<int, 2>& seeds) {
+                                  const std::array<int, 2> &seeds) {
   const Node &node = get_node(n);
   const Node &new_node = get_node(nn);
 
@@ -502,7 +522,7 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   int group, entry_index = 0, betterGroup = 0;
   // existing node: group[0], new node: group[1]
   Nid groups[2] = {n, nn};
-  const Node* nodes[2] = {&node, &new_node};
+  const Node *nodes[2] = {&node, &new_node};
   int max_fill = M + 1 - m;
   while (!entries.empty() && node.count < max_fill &&
          new_node.count < max_fill) {
@@ -558,10 +578,11 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   }
 }
 
-PRE void QUAL::distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries) {
-  int half = entries.size()/ 2 + 1;
-  for(int i=0; i<half; ++i) {
-      plain_insert(n, entries[i]);
+PRE void QUAL::distribute_entries_naive(Nid n, Nid nn,
+                                        std::vector<Eid> entries) {
+  int half = entries.size() / 2 + 1;
+  for (int i = 0; i < half; ++i) {
+    plain_insert(n, entries[i]);
   }
   for (int i = half; i < entries.size(); ++i) {
     plain_insert(nn, entries[i]);
@@ -571,8 +592,8 @@ PRE void QUAL::distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries)
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
                            const std::vector<Parent> &parents) {
   Rid r = get_entry(e).rect_id;
-  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) <<
-  // endl;
+  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents)
+  //      << endl;
   for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
     Parent parent = *it;
     const Node &parent_node = get_node(parent.node);
@@ -583,13 +604,16 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
       Eid ne = make_entry_id();
       Entry &new_entry = get_entry(ne);
       new_entry.child_id = nn;
-      cout << "adjust tree, added new node " << ne << nn << endl;
+      // cout << "adjust tree, added new node " << ne << nn << endl << node_to_string(nn) << endl;
       update_entry_rect(ne);
       nn = insert(parent.node, ne, parents);
-      cout << " after adjust tree, nn " << nn << endl;
+      // cout << " after adjust tree, nn " << nn << endl;
     }
-    const Entry &parent_entry = get_entry(parent.entry);
-    combine_rects(parent_entry.rect_id, r, parent_entry.rect_id);
+    // if parent is the root, there's no entry it's the child of to update its rect!
+    if (parent.node != m_root_id) {
+      const Entry &parent_entry = get_entry(parent.entry);
+      combine_rects(parent_entry.rect_id, r, parent_entry.rect_id);
+    }
     // TODO adjusting MBR
     // TODO if nn, try to insert to parent
   }
@@ -597,9 +621,9 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     // cout << "root split" << endl;
     // important: make_node_id before getting nodes
     // otherwise, references might get invalid
-    cout << ">>> root split " << n << nn << " root " << m_root_id << endl
-         << " tree was " << endl
-         << to_xml() << endl;
+    // cout << ">>> root split " << n << nn << " root " << m_root_id << endl
+    //      << " tree was " << endl
+    //      << to_xml() << endl;
     Nid new_root_id = make_node_id();
     Node &root = get_node(n);
     Node &new_node = get_node(nn);
@@ -621,10 +645,10 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     plain_insert(new_root_id, new_node_e);
 
     m_root_id = new_root_id;
-    cout << ":: split done, new root " << m_root_id << ", children "
-         << n << ", " << nn << " now tree is :" << endl
-         << to_xml() << endl;
-    cout << "<<< root split" << endl;
+    // cout << ":: split done, new root " << m_root_id << ", children " << n
+    //      << ", " << nn << " now tree is :" << endl
+    //      << to_xml() << endl;
+    // cout << "<<< root split" << endl;
   }
 }
 
@@ -685,7 +709,8 @@ PRE std::vector<DATATYPE> QUAL::search(const Vec &low, const Vec &high) {
   return res;
 }
 
-PRE void QUAL::search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results) {
+PRE void QUAL::search(const Vec &low, const Vec &high,
+                      std::vector<DATATYPE> &results) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
   for (int i = 0; i < m_dims; ++i) {
@@ -707,10 +732,12 @@ PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
     for (int i = 0; i < node.count; ++i) {
       Eid e = get_node_entry(n, i);
       Entry &entry = get_entry(e);
-      // hm, though I could use rect_contains, but I may be asking for a big rect (search), not a specific rect I have inserted
-      // thus, the entry rect (in this case) can not contain the query rect
-      // TODO different modes for search? When asking for only one rect (or eg querying a point rect), then I should use rect_contains
-      if (rects_overlap(entry.rect_id ,r)) {
+      // hm, though I could use rect_contains, but I may be asking for a big
+      // rect (search), not a specific rect I have inserted thus, the entry rect
+      // (in this case) can not contain the query rect
+      // TODO different modes for search? When asking for only one rect (or eg
+      // querying a point rect), then I should use rect_contains
+      if (rects_overlap(entry.rect_id, r)) {
         if (!search(entry.child_id, r, found_count, cb)) {
           // stop searching
           return false;
@@ -755,31 +782,34 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
   }
   return true;
 }
-PRE void QUAL::node_to_string(Nid nid, int level, int spaces, std::ostream &os) {
+PRE void QUAL::node_to_string(Nid nid, int level, int spaces,
+                              std::ostream &os) {
   Node node = get_node(nid);
   auto indent = [&]() {
-    for(int i=0; i< level*spaces ; ++i) {
+    for (int i = 0; i < level * spaces; ++i) {
       os << " ";
     }
   };
   indent();
-  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" children=\"" << node.count << "\" >" << endl;
+  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height
+     << "\" children=\"" << node.count << "\" >" << endl;
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
     Rid r = entry.rect_id;
     indent();
-    os << " <Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\"" << rect_to_string(r) << "\" >" << endl;
+    os << " <Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\""
+       << rect_to_string(r) << "\" >" << endl;
     if (node.height == 0) {
       Did did = entry.data_id;
       indent();
       os << " <Data id=\"" << did.id << "\"";
-      if(did) {
+      if (did) {
         os << " data=\"" << pp(get_data(did)) << "\"";
       }
       os << "/>" << endl;
     } else {
-      if(!entry.child_id) {
+      if (!entry.child_id) {
         os << " no-child ?? " << node.height << endl;
       } else {
         node_to_string(entry.child_id, level + 1, spaces, os);
@@ -792,9 +822,9 @@ PRE void QUAL::node_to_string(Nid nid, int level, int spaces, std::ostream &os) 
   os << "</Node>" << endl;
 };
 
-PRE std::string QUAL::node_to_string(Nid nid, int level) {
+PRE std::string QUAL::node_to_string(Nid nid, int level, int spaces) {
   std::ostringstream os;
-  node_to_string(nid, level, os);
+  node_to_string(nid, level, spaces, os);
   return os.str();
 };
 
@@ -812,12 +842,12 @@ PRE std::string QUAL::rect_to_string(Rid rid) {
   std::ostringstream os;
 
   ASSERT(rid);
-  for(int i=0; i<m_dims; i++) {
-    if(i==0) {
+  for (int i = 0; i < m_dims; i++) {
+    if (i == 0) {
       os << "{";
     }
     os << rect_low_ref(rid, i);
-    if(i != m_dims-1) {
+    if (i != m_dims - 1) {
       os << ", ";
     } else {
       os << "}";
@@ -825,7 +855,7 @@ PRE std::string QUAL::rect_to_string(Rid rid) {
   }
 
   os << "...";
-  
+
   for (int i = 0; i < m_dims; i++) {
     if (i == 0) {
       os << "{";
