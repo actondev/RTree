@@ -121,6 +121,8 @@ private:
     ELEMTYPE groups_areas[2]; // area covered by each group's MBR
     Rid temp_rects[2];        // temporary rect for each group, comparing growth
     std::vector<ELEMTYPE> entries_areas;
+    Rid cover_rect;
+    ELEMTYPE cover_area = 0;
   };
 
   /// max entries per node (best 8?)
@@ -287,6 +289,7 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
 
   m_partition.temp_rects[0] = make_rect_id();
   m_partition.temp_rects[1] = make_rect_id();
+  m_partition.cover_rect = make_rect_id();
 
   m_partition.entries_areas.resize(M + 1);
 }
@@ -410,11 +413,13 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
-  const Entry& entry = get_entry(e);
+  const Entry &entry = get_entry(e);
   // Did did = get_entry(e).data_id;
-  // cout << "insert " << n << e << ": data " << entry.data_id << " child " << entry.child_id << " traversal " << pp(traversal) << endl;
-  if(entry.child_id) {
-    // cout << " inserting entry with child!: " << endl << node_to_string(entry.child_id) << endl;
+  // cout << "insert " << n << e << ": data " << entry.data_id << " child " <<
+  // entry.child_id << " traversal " << pp(traversal) << endl;
+  if (entry.child_id) {
+    // cout << " inserting entry with child!: " << endl <<
+    // node_to_string(entry.child_id) << endl;
   }
   if (node.count < M) {
     // cout << "insert plain : " << e << did << " " << n << endl;
@@ -445,8 +450,8 @@ PRE void QUAL::plain_insert(Nid n, Eid e) {
 PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   // cout << ">>> split and insert " << n << e << endl;
   // cout << node_to_string(n) << endl;
-  const Entry& entry = get_entry(e);
-  if(entry.child_id) {
+  const Entry &entry = get_entry(e);
+  if (entry.child_id) {
     // cout << " :: split and insert: entry " << e  << " has child!" << endl;
     // cout << node_to_string(entry.child_id) << endl;
   }
@@ -465,32 +470,36 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
     entries[i] = get_node_entry(n, i);
   }
   entries[M] = e; // the new entry
-  // cout << " entries: " << pp(entries) << endl;
+  cout << " entries: " << pp(entries) << endl;
+
   std::array<int, 2> seeds = pick_seeds(entries);
 
   node.count = 0; // TODO free up entries (entry ids) to be reused
   new_node.count = 0;
 
   // debugging: just placing first hald entries to n, next ones to nn
-  // distribute_entries(n, nn, entries, seeds);
-  distribute_entries_naive(n, nn, entries);
+  distribute_entries(n, nn, entries, seeds);
+  // distribute_entries_naive(n, nn, entries);
 
-  // cout << ":: distributed entries" << endl;
-  // cout << node_to_string(n) << endl << node_to_string(nn) << endl;
-  // cout << "<<< split";
+  cout << ":: distributed entries" << endl;
+  cout << node_to_string(n) << endl << node_to_string(nn) << endl;
   ASSERT(node.count + new_node.count == M + 1);
   ASSERT(node.count >= m);
   ASSERT(new_node.count >= m);
-  
+
   // cout << "<<< split and insert" << endl;
   return nn;
 }
 
 PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                                   const std::array<int, 2> &seeds) {
+  bool debug = entries[0].id == 38;
   const Node &node = get_node(n);
   const Node &new_node = get_node(nn);
 
+  if(debug) {
+    cout << "seeds " << entries[seeds[0]] << entries[seeds[1]] << endl;
+  }
   plain_insert(n, entries[seeds[0]]);
   plain_insert(nn, entries[seeds[1]]);
 
@@ -500,20 +509,11 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
   m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
 
-  // TODO cover_split(_area)
-  /**
-  a_parVars->m_coverSplit = a_parVars->m_branchBuf[0].m_rect;
-  for (int index = 1; index < MAXNODES + 1; ++index) {
-    a_parVars->m_coverSplit = CombineRect(
-        &a_parVars->m_coverSplit, &a_parVars->m_branchBuf[index].m_rect);
-  }
-  a_parVars->m_coverSplitArea = CalcRectVolume(&a_parVars->m_coverSplit);
-   */
-
-  // removing the seeds from the entries
-  entries[seeds[0]] = entries.back();
-  entries.pop_back();
+  // removing the seeds from the entries. First removing the 2nd seed, as it will be bigger,
+  // cause it might be the last one
   entries[seeds[1]] = entries.back();
+  entries.pop_back();
+  entries[seeds[0]] = entries.back();
   entries.pop_back();
 
   ASSERT(entries.size() == M - 1); // M+1 -2
@@ -559,6 +559,9 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                   m_partition.groups_rects[betterGroup]);
     m_partition.groups_areas[betterGroup] =
         rect_volume(m_partition.groups_rects[betterGroup]);
+        if(debug) {
+        cout << " inserting " << groups[betterGroup] << entries[entry_index] << endl;
+        }
     plain_insert(groups[betterGroup], entries[entry_index]);
     // entries.erase(entries.begin() + entry_index);
     entries[entry_index] = entries.back();
@@ -589,35 +592,47 @@ PRE void QUAL::distribute_entries_naive(Nid n, Nid nn,
   }
 }
 
+// TODO entry 34 -> node 1: bounds 1,0..3,3: no 3,3 present!
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
                            const std::vector<Parent> &parents) {
-  Rid r = get_entry(e).rect_id;
-  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents)
-  //      << endl;
+  // cout << "adjust tree " << n << " " << nn << " " << e << " parents " <<
+  // pp(parents) << endl; if(n && nn) {
+  //   cout << ":: adjust tree with new node, tree was " << endl << to_xml() <<
+  //   endl;
+  // }
   for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
     Parent parent = *it;
     const Node &parent_node = get_node(parent.node);
-    if (parent_node.height == 0) {
-      continue;
+
+    if (parent.entry) {
+      if (nn) {
+        // if split (new node), need to readjust the parent entry
+        // rect. Entries are reorganized!
+        update_entry_rect(parent.entry);
+      } else {
+        // if no split (new node), then just accomdoate the new entry
+        const Entry &parent_entry = get_entry(parent.entry);
+        combine_rects(parent_entry.rect_id, get_entry(e).rect_id,
+                      parent_entry.rect_id);
+      }
     }
-    if (nn) {
+    // propagating new node (split) upwards.  The first parent is the
+    // node leaf, thus we need to skip it for the node insertion
+    if (nn && parent_node.height > 0) {
       Eid ne = make_entry_id();
       Entry &new_entry = get_entry(ne);
       new_entry.child_id = nn;
-      // cout << "adjust tree, added new node " << ne << nn << endl << node_to_string(nn) << endl;
+      // cout << "adjust tree, added new node " << ne << nn << endl <<
+      // node_to_string(nn) << endl;
       update_entry_rect(ne);
+
       nn = insert(parent.node, ne, parents);
       // cout << " after adjust tree, nn " << nn << endl;
     }
-    // if parent is the root, there's no entry it's the child of to update its rect!
-    if (parent.node != m_root_id) {
-      const Entry &parent_entry = get_entry(parent.entry);
-      combine_rects(parent_entry.rect_id, r, parent_entry.rect_id);
-    }
-    // TODO adjusting MBR
-    // TODO if nn, try to insert to parent
   }
+  // TODO breakpoint with child_id = 15
   if (n == m_root_id && nn) {
+    // Root split!
     // cout << "root split" << endl;
     // important: make_node_id before getting nodes
     // otherwise, references might get invalid
@@ -658,11 +673,19 @@ PRE std::array<int, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
   std::array<int, 2> res;
   ASSERT(entries.size() == M + 1);
 
+  copy_rect(get_entry(entries[0]).rect_id, m_partition.cover_rect);
+  for (int i = 0; i < entries.size(); ++i) {
+    combine_rects(m_partition.cover_rect, get_entry(entries[i]).rect_id,
+                  m_partition.cover_rect);
+  }
+  m_partition.cover_area = rect_volume(m_partition.cover_rect);
+
   // TODO sth wrogn with worst & waste comparison
   // init both to 0
   int seed0 = 0, seed1 = 0;
-  ELEMTYPE worst = -1, waste;
-  worst = std::numeric_limits<ELEMTYPE>::min();
+  ELEMTYPE worst, waste;
+  // worst = std::numeric_limits<ELEMTYPE>::min();
+  worst = -m_partition.cover_area - 1;
   for (int i = 0; i < entries.size(); ++i) {
     m_partition.entries_areas[i] = rect_volume(get_entry(entries[i]).rect_id);
   }
