@@ -432,6 +432,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   Nid nn = make_node_id();
   Node &node = get_node(n);
   Node &new_node = get_node(nn);
+  new_node.height = node.height; // important!
   ASSERT(node.count == M); // if node is not full, makes no sense being here
 
   std::vector<Eid> &entries = m_partition.entries;
