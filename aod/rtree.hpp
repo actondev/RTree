@@ -91,7 +91,22 @@ template <class DATATYPE, class ELEMTYPE = double> class rtree {
   using Predicate = std::function<bool(const DATATYPE &)>;
   using SearchCb = std::function<bool(const DATATYPE &)>;
 
+ public:
+  struct Xml {
+    rtree* tree;
+    int spaces = 4;
+    Xml() = delete;
+    Xml(rtree* tree): tree{tree} {}
+    friend std::ostream &operator<<(std::ostream &os, const Xml &o) {
+      os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
+         << endl;
+      o.tree->to_string(o.spaces, os);
+      return os;
+    }
+  };
+  
 private:
+  
   /// Helper struct used in partitioning M+1 entries into two groups
   struct Partition {
     std::vector<Eid> entries; // up to M+1
@@ -190,7 +205,7 @@ private:
   }
   std::string rect_to_string(Rid);
   std::string node_to_string(Nid nid, int level = 0);
-  void node_to_string(Nid nid, int level, std::ostream&);
+  void node_to_string(Nid nid, int level, int spaces, std::ostream&);
 
   void copy_rect(Rid src, Rid dst) {
     for (auto i = 0; i < m_dims; ++i) {
@@ -207,7 +222,10 @@ public:
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
   void search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results);
   std::string to_string();
-  void to_string(std::ostream&);
+  void to_string(int spaces, std::ostream&);
+  Xml to_xml() {
+    return Xml(this);
+  }
 
 private:
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
@@ -692,43 +710,47 @@ PRE bool QUAL::rects_overlap(Rid a, Rid b) {
   }
   return true;
 }
-PRE void QUAL::node_to_string(Nid nid, int level, std::ostream &os) {
+PRE void QUAL::node_to_string(Nid nid, int level, int spaces, std::ostream &os) {
   Node node = get_node(nid);
-  std::string indent;
-  for (int i = 0; i < level; ++i) {
-    indent += "  ";
-  }
-  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" level=\"" << level << "\" >" << endl;
+  auto indent = [&]() {
+    for(int i=0; i< level*spaces ; ++i) {
+      os << " ";
+    }
+  };
+  indent();
+  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" children=\"" << node.count << "\" level=\"" << level << "\" >" << endl;
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
     Rid r = entry.rect_id;
-    os << "<Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\"" << rect_to_string(r) << "\" />" << endl;
-    // os << indent << e << " " << r << rect_to_string(r);
+    indent();
+    os << " <Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\"" << rect_to_string(r) << "\" >" << endl;
     if (node.height == 0) {
       Did did = entry.data_id;
-      os << "<Data id=\"" << did.id << "\"";
+      indent();
+      os << " <Data id=\"" << did.id << "\"";
       if(did) {
         os << " data=\"" << pp(get_data(did)) << "\"";
       }
       os << "/>" << endl;
     } else {
-      os << "<Child id=\"" << entry.child_id.id << "\" />" << endl;
-      // TODO remove, or, assert entry.child_id
       if(!entry.child_id) {
-        os << ".. no child?? node height " << node.height << endl;
+        os << " no-child ?? " << node.height << endl;
       } else {
-        node_to_string(entry.child_id, level + 1, os);
+        node_to_string(entry.child_id, level + 1, spaces, os);
       }
     }
+    indent();
+    os << " </Entry>" << endl;
   }
+  indent();
   os << "</Node>" << endl;
 };
 
 PRE std::string QUAL::node_to_string(Nid nid, int level) {
   std::ostringstream os;
   node_to_string(nid, level, os);
-    return os.str();
+  return os.str();
 };
 
 PRE std::string QUAL::to_string() {
@@ -737,8 +759,8 @@ PRE std::string QUAL::to_string() {
   return os.str();
 }
 
-PRE void QUAL::to_string(std::ostream &os) {
-  node_to_string(m_root_id, 0, os);
+PRE void QUAL::to_string(int spaces, std::ostream &os) {
+  node_to_string(m_root_id, 0, spaces, os);
 }
 
 PRE std::string QUAL::rect_to_string(Rid rid) {

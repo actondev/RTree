@@ -6,10 +6,12 @@
 #include <chrono> // for high_resolution_clock
 #include <easyprint.hpp>
 #include <iostream>
+#include <fstream>
 #include <drtree/RTree.h>
 #include <aod/rtree.hpp>
 #include <vector>
 #include <random>
+
 
 using std::cerr;
 using std::cout;
@@ -455,6 +457,50 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
 }
 
+TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
+  const int size = 5;
+  auto grid = make_grid(size); // TODO crashes with 3 (works with 2)
+  auto t1 = high_resolution_clock::now();
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  auto t2 = high_resolution_clock::now();
+  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == size*size);
+
+  cout << "200x2d aod::rtree tree " << endl;
+  tree.to_string(0, std::cout);
+  cout << endl;
+
+  std::vector<Point> expected = {
+    { 5.0, 2.0 },
+    { 5.0, 3.0 },
+    { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  std::vector<double> low = {5 , 2};
+  std::vector<double> high = {6 , 4};
+  auto found = tree.search(low, high);
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+  // return;
+  t1 = now();
+  for (int i = 0; i < 10000; i++) {
+    tree.search(low, high, found);
+  }
+  t2 = now();
+  WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
+
+  t1 = now();
+  aod::rtree<Point>tree2 = tree;
+  t2 = now();
+  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+
+  REQUIRE(tree2.size() == tree.size());
+  auto found2 = tree2.search(low, high);
+  REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
+}
+
+
 void shuffle_deterministic(Grid& grid) {
   std::mt19937 gen(0);
   std::shuffle(std::begin(grid.points), std::end(grid.points), gen);
@@ -512,7 +558,6 @@ TEST_CASE("drtree3 test: 10x10", "[drtree3][basic test][FIXME]") {
   REQUIRE(tree.size() == size*size);
   std::vector<Point> expected;
   std::vector<Point> found;
-  int removed;
   
   expected = {
     { 5.0, 5.0 }, { 5.0, 6.0 }, { 5.0, 7.0 },
@@ -564,8 +609,8 @@ TEST_CASE("drtree3 test: 4x4", "[drtree3][basic test]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
-  const int size = 5;
+TEST_CASE("aod rtree test: 4x4", "[aod::rtree][basic test]") {
+  const int size = 3;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   
@@ -573,13 +618,24 @@ TEST_CASE("aod rtree test: 4x4", "[aod_rtree][basic test]") {
   REQUIRE(tree.size() == size*size);
   std::vector<Point> expected;
   std::vector<Point> found;
-  int removed;
+  // int removed;
 
-  cout << "-- tree " << endl << tree.to_string();
-  found = tree.search({1,1}, {2, 2});
+  cout << "-- tree " << endl << tree.to_xml() << endl;
+  
+  std::ofstream ofs("aod-rtree-4x4.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+  return;
+
+  // found = tree.search({1,1}, {2, 2});
+  // sort_points(found);
+  // expected = {{1, 1}, {1, 2}, {2, 1}, {2, 2}};
+  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  found = tree.search({4,0}, {4, 2});
   sort_points(found);
-  // REQUIRE(found.size() == 4);
-  expected = {{1, 1}, {1, 2}, {2, 1}, {2, 2}};
+  cout << "found 2 " << pp(found) << endl;
+  expected = {{4, 0}, {4, 1}, {4, 2}};
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
   // removing a fat cross in the center
