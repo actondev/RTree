@@ -22,6 +22,9 @@ struct Id {
   Id() : Id(nullid){};
   Id(const Id &other) : Id(other.id){};
   Id(id_t id) : id{id} {}
+  friend bool operator==(const Id& lhs, const Id& rhs) {
+    return lhs.id == rhs.id;
+  }
 };
 
 // Rect Id
@@ -117,7 +120,7 @@ private:
   };
 
   /// max entries per node
-  const int M = 8; // max entries per node
+  const int M = 4; // max entries per node
 
   /// min entries per node. Could be hardcoded 2 as well, the paper
   /// shows good performance with hardcoded 2 as well
@@ -232,7 +235,10 @@ private:
   /// new node id
   Nid split_and_insert(Nid n, Eid e);
   void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &traversal);
-  std::array<Eid, 2> pick_seeds(const std::vector<Eid> &entries);
+  std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
+  void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
+                     const std::array<int, 2>& seeds);
+  void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
   bool rects_overlap(Rid, Rid);
@@ -374,6 +380,7 @@ PRE void QUAL::update_entry_rect(Eid e) {
 }
 
 PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
+  ++m_size; // for debug, I read it in insert/split functions
   Eid e = make_entry_id(); // also sets the rect
   Entry &entry = get_entry(e);
   entry.data_id = make_data_id();
@@ -390,7 +397,6 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   m_traversal.clear();
   Nid n = choose_leaf(entry.rect_id, m_traversal);
   insert(n, e, m_traversal);
-  ++m_size;
 }
 
 PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal) {
@@ -428,25 +434,48 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   Node &new_node = get_node(nn);
   ASSERT(node.count == M); // if node is not full, makes no sense being here
 
-  std::vector<Eid> &split_entries = m_partition.entries;
-  split_entries.clear();
-  split_entries.resize(M + 1);
+  std::vector<Eid> &entries = m_partition.entries;
+  entries.clear();
+  entries.resize(M + 1);
 
   for (int i = 0; i < node.count; ++i) {
-    split_entries[i] = get_node_entry(n, i);
+    entries[i] = get_node_entry(n, i);
   }
-  split_entries[M] = e; // the new entry
-  std::array<Eid, 2> seeds = pick_seeds(split_entries);
+  entries[M] = e; // the new entry
+  std::array<int, 2> seeds = pick_seeds(entries);
 
   node.count = 0; // TODO free up entries (entry ids) to be reused
   new_node.count = 0;
 
-  plain_insert(n, seeds[0]);
-  plain_insert(nn, seeds[1]);
+  // debugging: just placing first hald entries to n, next ones to nn
+  // distribute_entries(n, nn, entries, seeds);
+  distribute_entries_naive(n, nn, entries);
+
+  // done
+  ASSERT(node.count + new_node.count == M + 1);
+  ASSERT(node.height == new_node.height);
+  ASSERT(node.count >= m);
+  ASSERT(new_node.count >= m);
+
+  cout << ">>> split nodes, tree size " << m_size << endl;
+  node_to_string(n, 0, 4, std::cout);
+  node_to_string(nn, 0, 4, std::cout);
+  cout << "<<< split nodes" << endl;
+  return nn;
+}
+
+
+PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
+                        const std::array<int, 2>& seeds) {
+  const Node &node = get_node(n);
+  const Node &new_node = get_node(nn);
+
+  plain_insert(n, entries[seeds[0]]);
+  plain_insert(nn, entries[seeds[1]]);
 
   // initializing helper rects
-  copy_rect(get_entry(seeds[0]).rect_id, m_partition.groups_rects[0]);
-  copy_rect(get_entry(seeds[1]).rect_id, m_partition.groups_rects[1]);
+  copy_rect(get_entry(entries[seeds[0]]).rect_id, m_partition.groups_rects[0]);
+  copy_rect(get_entry(entries[seeds[1]]).rect_id, m_partition.groups_rects[1]);
   m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
   m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
 
@@ -460,39 +489,34 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   a_parVars->m_coverSplitArea = CalcRectVolume(&a_parVars->m_coverSplit);
    */
 
-  // TODO implement Eid == operator
-  split_entries.erase(
-      std::remove_if(split_entries.begin(), split_entries.end(),
-                     [&seeds](const Eid &o) { return o.id == seeds[0].id; }));
-  split_entries.erase(
-      std::remove_if(split_entries.begin(), split_entries.end(),
-                     [&seeds](const Eid &o) { return o.id == seeds[1].id; }));
+  // removing the seeds from the entries
+  entries[seeds[0]] = entries.back();
+  entries.pop_back();
+  entries[seeds[1]] = entries.back();
+  entries.pop_back();
 
-  ASSERT(split_entries.size() == M-1); // M+1 -2
+  ASSERT(entries.size() == M - 1); // M+1 -2
 
   ELEMTYPE biggestDiff;
   int group, entry_index = 0, betterGroup = 0;
   // existing node: group[0], new node: group[1]
   Nid groups[2] = {n, nn};
-  int* groups_count[2] = {
-    &node.count,
-    &new_node.count
-  };
-  int max_fill = M+1-m;
-  while(!split_entries.empty() &&
-        node.count < max_fill &&
-        new_node.count < max_fill
-        ) {
+  const Node* nodes[2] = {&node, &new_node};
+  int max_fill = M + 1 - m;
+  while (!entries.empty() && node.count < max_fill &&
+         new_node.count < max_fill) {
     biggestDiff = (ELEMTYPE)-1;
-    for(int i=0; i<split_entries.size(); ++i) {
-      const Entry& entry = get_entry(split_entries[i]);
+    for (int i = 0; i < entries.size(); ++i) {
+      const Entry &entry = get_entry(entries[i]);
       Rid r = entry.rect_id;
       combine_rects(r, m_partition.groups_rects[0], m_partition.temp_rects[0]);
       combine_rects(r, m_partition.groups_rects[1], m_partition.temp_rects[1]);
-      ELEMTYPE growth0 = rect_volume(m_partition.temp_rects[0]) - m_partition.groups_areas[0];
-      ELEMTYPE growth1 = rect_volume(m_partition.temp_rects[1]) - m_partition.groups_areas[1];
+      ELEMTYPE growth0 =
+          rect_volume(m_partition.temp_rects[0]) - m_partition.groups_areas[0];
+      ELEMTYPE growth1 =
+          rect_volume(m_partition.temp_rects[1]) - m_partition.groups_areas[1];
       ELEMTYPE diff = growth1 - growth0;
-      if(diff > 0 ) {
+      if (diff > 0) {
         group = 0;
       } else {
         group = 1;
@@ -502,56 +526,68 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
         biggestDiff = diff;
         entry_index = i;
         betterGroup = group;
-      } else if ((diff == biggestDiff) && (*groups_count[group] <
-                                           *groups_count[betterGroup])) {
+      } else if ((diff == biggestDiff) &&
+                 (nodes[group]->count < nodes[betterGroup]->count)) {
         entry_index = i;
         betterGroup = group;
       }
     }
     // put chose into the betterGroup
-    combine_rects(get_entry(split_entries[entry_index]).rect_id, m_partition.groups_rects[betterGroup], m_partition.groups_rects[betterGroup]);
-    m_partition.groups_areas[betterGroup] = rect_volume(m_partition.groups_rects[betterGroup]);
-    plain_insert(groups[betterGroup], split_entries[entry_index]);
-    split_entries.erase(split_entries.begin() + entry_index);
+    combine_rects(get_entry(entries[entry_index]).rect_id,
+                  m_partition.groups_rects[betterGroup],
+                  m_partition.groups_rects[betterGroup]);
+    m_partition.groups_areas[betterGroup] =
+        rect_volume(m_partition.groups_rects[betterGroup]);
+    plain_insert(groups[betterGroup], entries[entry_index]);
+    // entries.erase(entries.begin() + entry_index);
+    entries[entry_index] = entries.back();
+    entries.pop_back();
   }
   // exited early cause one node filled too much
-  if(node.count + new_node.count < M+1 ) {
+  if (node.count + new_node.count < M + 1) {
     Nid to_fill;
-    if(node.count >= max_fill) {
+    if (node.count >= max_fill) {
       to_fill = nn;
     } else {
       to_fill = n;
     }
-    for(const Eid& e : split_entries) {
+    for (const Eid &e : entries) {
       plain_insert(to_fill, e);
     }
   }
+}
 
-  ASSERT(node.count + new_node.count == M+1);
-  ASSERT(node.count >=m);
-  ASSERT(new_node.count >=m);
-
-  return nn;
+PRE void QUAL::distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries) {
+  int half = entries.size()/ 2 + 1;
+  for(int i=0; i<half; ++i) {
+      plain_insert(n, entries[i]);
+  }
+  for (int i = half; i < entries.size(); ++i) {
+    plain_insert(nn, entries[i]);
+  }
 }
 
 PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
                            const std::vector<Parent> &parents) {
   Rid r = get_entry(e).rect_id;
-  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) << endl;
+  // cout << "adjust tree " << n << " " << nn << " parents " << pp(parents) <<
+  // endl;
   for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
     Parent parent = *it;
-    const Node& parent_node = get_node(parent.node);
-    if(parent_node.height == 0) {
+    const Node &parent_node = get_node(parent.node);
+    if (parent_node.height == 0) {
       continue;
     }
-    if(nn) {
+    if (nn) {
       Eid ne = make_entry_id();
-      Entry& new_entry = get_entry(ne);
+      Entry &new_entry = get_entry(ne);
       new_entry.child_id = nn;
+      cout << "adjust tree, added new node " << ne << nn << endl;
       update_entry_rect(ne);
       nn = insert(parent.node, ne, parents);
+      cout << " after adjust tree, nn " << nn << endl;
     }
-    const Entry& parent_entry = get_entry(parent.entry);
+    const Entry &parent_entry = get_entry(parent.entry);
     combine_rects(parent_entry.rect_id, r, parent_entry.rect_id);
     // TODO adjusting MBR
     // TODO if nn, try to insert to parent
@@ -560,6 +596,9 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     // cout << "root split" << endl;
     // important: make_node_id before getting nodes
     // otherwise, references might get invalid
+    cout << ">>> root split " << n << nn << " root " << m_root_id << endl
+         << " tree was " << endl
+         << to_xml() << endl;
     Nid new_root_id = make_node_id();
     Node &root = get_node(n);
     Node &new_node = get_node(nn);
@@ -581,29 +620,34 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e,
     plain_insert(new_root_id, new_node_e);
 
     m_root_id = new_root_id;
-    // cout << "root split done, new root " << m_root_id << ", children " << n << ", " << nn
-    //      << endl;
+    cout << ":: split done, new root " << m_root_id << ", children "
+         << n << ", " << nn << " now tree is :" << endl
+         << to_xml() << endl;
+    cout << "<<< root split" << endl;
   }
 }
 
 /// Linear Pick Seeds. Pick first entry for each group. We get 2
 /// groups after splittinga node.
-PRE std::array<Eid, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
-  std::array<Eid, 2> res;
-  ASSERT(entries.size() == M+1);
+PRE std::array<int, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
+  std::array<int, 2> res;
+  ASSERT(entries.size() == M + 1);
 
   // TODO sth wrogn with worst & waste comparison
+  // init both to 0
   int seed0 = 0, seed1 = 0;
   ELEMTYPE worst = -1, waste;
   worst = std::numeric_limits<ELEMTYPE>::min();
-  for(int i=0; i< entries.size(); ++i) {
+  for (int i = 0; i < entries.size(); ++i) {
     m_partition.entries_areas[i] = rect_volume(get_entry(entries[i]).rect_id);
   }
 
   for (int i = 0; i < entries.size() - 1; ++i) {
     for (int j = i + 1; j < entries.size(); ++j) {
-      combine_rects(get_entry(entries[i]).rect_id, get_entry(entries[j]).rect_id, m_temp_rect);
-      waste = rect_volume(m_temp_rect) - m_partition.entries_areas[i] - m_partition.entries_areas[j];
+      combine_rects(get_entry(entries[i]).rect_id,
+                    get_entry(entries[j]).rect_id, m_temp_rect);
+      waste = rect_volume(m_temp_rect) - m_partition.entries_areas[i] -
+              m_partition.entries_areas[j];
       if (waste > worst) {
         worst = waste;
         seed0 = i;
@@ -612,8 +656,8 @@ PRE std::array<Eid, 2> QUAL::pick_seeds(const std::vector<Eid> &entries) {
     }
   }
   ASSERT(seed0 != seed1);
-  res[0] = entries[seed0];
-  res[1] = entries[seed1];
+  res[0] = seed0;
+  res[1] = seed1;
 
   return res;
 }
@@ -718,7 +762,7 @@ PRE void QUAL::node_to_string(Nid nid, int level, int spaces, std::ostream &os) 
     }
   };
   indent();
-  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" children=\"" << node.count << "\" level=\"" << level << "\" >" << endl;
+  os << "<Node id=\"" << nid.id << "\" height=\"" << node.height << "\" children=\"" << node.count << "\" >" << endl;
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(nid, i);
     Entry entry = get_entry(e);
