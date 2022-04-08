@@ -344,7 +344,7 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
 // 4 MAXDIMS: total heap usage: 218,693 allocs, 218,693 frees, 12,036,490 bytes allocated
 TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
 #define MAXDIMS 2
-  int dims = 2
+  int dims = 2;
   auto grid = make_grid(benchmark_size, dims);
 
   auto t1 = now();
@@ -684,6 +684,55 @@ TEST_CASE("drtree3 test: 8x8", "[drtree3][basic test]") {
     { 4.0, 4.0 }, { 4.0, 5.0 }, { 5.0, 4.0 }, { 5.0, 5.0 } };
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
+
+TEST_CASE("aod::rtree 8x8", "[aod::rtree][fixme]") {
+  const int size = 8;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  REQUIRE(tree.size() == size*size);
+
+  std::ofstream ofs;
+  
+  ofs = std::ofstream("aod-rtree-8x8-init.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+  
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+
+  found = tree.search({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(found.size() == 32);
+  // horizontal: 8 * (8-2*retain_side) = 32
+  // {0, 2}, {7, 5}
+  int removed1 = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed1 == 32);
+  REQUIRE(tree.size() == size*size - removed1);
+  found = tree.search({0, 0}, {10, 10});
+  REQUIRE(found.size() == size*size - removed1);
+  
+  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
+  // 2 horizontal stripes removed 2 rowsof 3 in bottom row & same in top
+  // 2 * (size-2*retain_side)*retain_side = 2*4*2 = 16
+  REQUIRE(removed2 == 16);
+  REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
+  REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected = {
+    { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
+    { 0.0, 6.0 }, { 0.0, 7.0 }, { 1.0, 6.0 }, { 1.0, 7.0 },
+    { 6.0, 0.0 }, { 6.0, 1.0 }, { 7.0, 0.0 }, { 7.0, 1.0 },
+    { 6.0, 6.0 }, { 6.0, 7.0 }, { 7.0, 6.0 }, { 7.0, 7.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
 
 TEST_CASE("drtree3 test: 100x100", "[drtree3][basic test][fixme]") {
   const int size = 100;

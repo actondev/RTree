@@ -53,8 +53,8 @@ struct Entry {
 };
 
 struct Parent {
-  Nid node;
   Eid entry;
+  Nid node;
 };
 
 struct Node {
@@ -96,6 +96,9 @@ template <class DATATYPE, class ELEMTYPE = double> class rtree {
                 "'COORD_TYPE' accepts floating-point types only");
 
   typedef std::vector<ELEMTYPE> Vec;
+
+  using Traversal = std::vector<Parent>;
+  using Traversals = std::vector<Traversal>;
 
   using Predicate = std::function<bool(const DATATYPE &)>;
   using SearchCb = std::function<bool(const DATATYPE &)>;
@@ -144,7 +147,7 @@ private:
   Rid m_temp_rect;
   Partition m_partition;
 
-  std::vector<Parent> m_traversal;
+  Traversal m_traversal;
 
   std::vector<ELEMTYPE> m_rects_low;
   std::vector<ELEMTYPE> m_rects_high;
@@ -210,8 +213,7 @@ private:
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
-  std::string traversal_to_string(const std::vector<Parent> &traversal,
-                                  int traversal_offset);
+  std::string traversal_to_string(const Traversal &traversal);
   std::string node_to_string(Nid nid, int level = 0, int spaces = 4);
   void node_to_string(Nid nid, int level, int spaces, std::ostream &);
   bool has_duplicate_nodes();
@@ -230,6 +232,7 @@ public:
   size_t size();
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
   void search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results);
+  int remove(const Vec &low, const Vec &high);
   std::string to_string();
   void to_string(int spaces, std::ostream &);
   Xml to_xml() { return Xml(this); }
@@ -241,20 +244,20 @@ private:
 
   /// Ascend from leaf node L to the root, adjusting rectangles and
   /// propagating node splits as necessary
-  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &traversal);
+  void adjust_tree(Nid n, Nid nn, Eid e, const Traversal &traversal);
   std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                           const std::array<int, 2> &seeds);
   void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
   bool search(Nid, Rid, int &found_count, SearchCb);
   bool rect_contains(Rid bigger, Rid smaller);
-  bool rects_overlap(Rid, Rid);
+  inline bool rects_overlap(Rid, Rid);
 
   /// insert entry into leaf node: if a split occured, returns a valid new node
   Nid insert(Nid, Eid);
   void plain_insert(Nid, Eid);
-  Nid choose_leaf(Rid r, std::vector<Parent> &traversal);
-  Nid choose_node(Nid n, Rid r, int height, std::vector<Parent> &traversal);
+  Nid choose_leaf(Rid r, Traversal &traversal);
+  Nid choose_node(Nid n, Rid r, int height, Traversal &traversal);
   Eid choose_subtree(Nid n, Rid r);
 
   /// Given an R-tree whose root node is T, find the leaf node
@@ -267,6 +270,10 @@ private:
   /// all covering rectagles on the path to the root, making them
   /// smaller if possible
   void condense_tree(Node T);
+
+  void remove(Nid n, Rid r, int &removed, Traversals &, const Traversal & cur_traversal, Predicate cb);
+  int count(Nid n);
+  void count(Nid n, int&); // recursive
 
   // TODO signatures
 
@@ -293,7 +300,7 @@ PRE QUAL::rtree(int dimensions) : m_dims(dimensions) {
   m_partition.entries_areas.resize(M + 1);
 }
 
-PRE Nid QUAL::choose_leaf(Rid r, std::vector<Parent> &traversal) {
+PRE Nid QUAL::choose_leaf(Rid r, Traversal &traversal) {
   // Eid subtree = choose_subtree(n, r);
   // Nid child = get_entry(subtree).child_id;
   Parent p;
@@ -302,8 +309,7 @@ PRE Nid QUAL::choose_leaf(Rid r, std::vector<Parent> &traversal) {
   return choose_node(m_root_id, r, 0, traversal);
 }
 
-PRE Nid QUAL::choose_node(Nid n, Rid r, int height,
-                          std::vector<Parent> &traversal) {
+PRE Nid QUAL::choose_node(Nid n, Rid r, int height, Traversal &traversal) {
   ASSERT(n);
   ASSERT(r);
   Node &node = get_node(n);
@@ -402,7 +408,8 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   Rid r = entry.rect_id;
 
   // cout << endl;
-  // cout << "+++ insert " << e << " " << entry.data_id << " " << pp(data) << endl;
+  // cout << "+++ insert " << e << " " << entry.data_id << " " << pp(data) <<
+  // endl;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -585,18 +592,19 @@ PRE void QUAL::distribute_entries_naive(Nid n, Nid nn,
 }
 
 // todo: remove traversal_offset? this no longer gets called recursively
-PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &parents) {
+PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const Traversal &parents) {
   Node &node = get_node(n);
-  // cout << ">>> adjust tree n " << n << " height " << node.height << " nn " << nn
+  // cout << ">>> adjust tree n " << n << " height " << node.height << " nn " <<
+  // nn
   //      << " " << e;
-  // cout << traversal_to_string(parents, traversal_offset) << endl;
+  // cout << traversal_to_string(parents) << endl;
   for (int i = parents.size() - 1; i >= 0; --i) {
     const Parent &parent = parents[i];
     const Node &parent_node = get_node(parent.node);
     if (parent_node.height == 0) {
       // traversal contains also the newly inserted item, with the
       // leaf node that was selected. We can just skip this one.
-      // 
+      //
       // Note: when a split occured it's not necessary that the last
       // (above) parent node is the same where the inserted entry was
       // placed! Cause after distributing the entries in the two 2 new
@@ -613,8 +621,8 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &pare
         // cout << "    updating parent rect: " << parent << endl;
         update_entry_rect(parent.entry);
       } else {
-        // cout << "    absorbing newly inserted entry into parent" << parent << endl;
-        // if no split (new node), then just accomodate the new entry
+        // cout << "    absorbing newly inserted entry into parent" << parent <<
+        // endl; if no split (new node), then just accomodate the new entry
         const Entry &parent_entry = get_entry(parent.entry);
         combine_rects(parent_entry.rect_id, get_entry(e).rect_id,
                       parent_entry.rect_id);
@@ -625,7 +633,8 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &pare
     if (nn && parent_node.height > 0) {
       Eid ne = make_entry_id();
       Entry &new_entry = get_entry(ne);
-      // cout << ".. inserting nn, made entry " << ne << " child nn " << nn << endl;
+      // cout << ".. inserting nn, made entry " << ne << " child nn " << nn <<
+      // endl;
       new_entry.child_id = nn;
       update_entry_rect(ne);
 
@@ -779,6 +788,90 @@ PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
   return true; // continue searching
 }
 
+PRE int QUAL::remove(const Vec &low, const Vec &high) {
+  ASSERT(low.size() == m_dims);
+  ASSERT(high.size() == m_dims);
+  for (int i = 0; i < m_dims; ++i) {
+    rect_low_ref(m_temp_rect, i) = low[i];
+    rect_high_ref(m_temp_rect, i) = high[i];
+  }
+  int removed = 0;
+  std::vector<Traversal> remove_traverals;
+  Predicate cb = [] (const DATATYPE& data ) {
+    return true;
+  };
+  Traversal cur_traversal;
+  Parent p;
+  p.node = m_root_id;
+  cur_traversal.push_back(p);
+  remove(m_root_id, m_temp_rect, removed, remove_traverals, cur_traversal, cb);
+
+  cout << "remove_traverals " << pp(remove_traverals) << endl;
+  // TODO condense_tree
+  m_size -= removed;
+  return removed;
+}
+
+PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals, const Traversal &cur_traversal, Predicate cb) {
+  // cout << "cur traversal " << pp(cur_traversal) << endl;
+  Node &node = get_node(n);
+  if (node.is_internal()) {
+    for (int i = 0; i < node.count; ++i) {
+      Eid e = get_node_entry(n, i);
+      const Entry &entry = get_entry(e);
+      if (rects_overlap(r, entry.rect_id)) {
+        Traversal sub_traversal = cur_traversal;
+        Parent p;
+        p.entry = e;
+        p.node = entry.child_id;
+        sub_traversal.push_back(p);
+        // cout << "here , cur_traversal " << pp(cur_traversal) << " sub " << pp(sub_traversal) << endl;
+        remove(entry.child_id, r, counter, traversals, sub_traversal, cb);
+      }
+    }
+  } else {
+    // leaf
+    bool removed = false;
+    for (int i = 0; i < node.count; ++i) {
+      Eid e = get_node_entry(n, i);
+      const Entry &entry = get_entry(e);
+      if (rects_overlap(r, entry.rect_id)) {
+        if (cb(get_data(entry.data_id))) {
+          removed = true;
+          ++counter;
+          // TODO refactor into a function
+          set_node_entry(n, i, get_node_entry(n, node.count-1));
+          --node.count;
+          --i; // gotta revisit i again
+        }
+      }
+    }
+    if (removed) {
+      traversals.push_back(cur_traversal);
+    }
+  }
+}
+
+PRE int QUAL::count(Nid n) {
+  int counter = 0;
+  count(n, counter);
+  return counter;
+}
+
+PRE void QUAL::count(Nid n, int& counter) {
+  const Node& node = get_node(n);
+  if (node.is_internal()) {
+    for (int i= 0; i < node.count; ++i) {
+      const Entry& entry = get_entry(get_node_entry(n, i));
+      ASSERT(entry.child_id);
+      count(entry.child_id, counter);
+    }
+  } else {
+    // leaf
+    counter += node.count;
+  }
+}
+
 PRE bool QUAL::has_duplicate_nodes() {
   std::set<id_t> nodes;
 
@@ -909,19 +1002,19 @@ PRE std::string QUAL::rect_to_string(Rid rid) {
 
   return os.str();
 }
-PRE std::string QUAL::traversal_to_string(const std::vector<Parent> &traversal,
-                                          int offset) {
+PRE std::string QUAL::traversal_to_string(const Traversal &traversal) {
   std::ostringstream os;
+  os << "Traversal{" << pp(traversal) << "}";
 
-  os << "Traversal" << offset << "{";
-  for (int i = 0; i < traversal.size() - offset; ++i) {
-    const Parent &parent = traversal[i];
-    os << parent;
-    if (i < traversal.size() - 1) {
-      os << ", ";
-    }
-  }
-  os << "}";
+  // os << "Traversal" << offset << "{";
+  // for (int i = 0; i < traversal.size() - offset; ++i) {
+  //   const Parent &parent = traversal[i];
+  //   os << parent;
+  //   if (i < traversal.size() - 1) {
+  //     os << ", ";
+  //   }
+  // }
+  // os << "}";
   return os.str();
 }
 

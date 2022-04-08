@@ -35,6 +35,7 @@ test('tests',
      # args: ['drtree3 test: 10x10']
      # args: ['[basic test]']
      # args: ['[benchmark]']
+     # args: ['[benchmark][aod::rtree]']
      # args: ['[drtree3]']
      # args: ['[drtree2]']
      # args: ['[benchmark]']

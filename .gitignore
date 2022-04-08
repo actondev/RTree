@@ -4,3 +4,4 @@ subprojects/*
 .cache/
 callgrind.out*
 massif.out*
+*.xml
