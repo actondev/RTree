@@ -211,7 +211,6 @@ TEST_CASE("bounds after removals & insertions") {
   expected_min = {3, 3};
   // expected_max = {9,9}; // same
 
-  // FIXME
   // REQUIRE(actual_min == expected_min);
   // REQUIRE(actual_max == expected_max);
 }
@@ -474,8 +473,10 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
 }
 
 TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
-  const int size = 10;
+  // 6x6 not working
+  const int size = 10; // todo 10
   auto grid = make_grid(size);
+  shuffle_deterministic(grid);
   aod::rtree<Point> tree = grid_to_aod_rtree(grid);
   REQUIRE(tree.size() == size*size);
 
@@ -483,9 +484,8 @@ TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
   ofs << tree.to_xml();
   ofs.close();
 
-  // cout << "200x2d aod::rtree tree " << endl;
-  // tree.to_string(0, std::cout);
-  // cout << endl;
+  // 3,1 4,1 missing
+  // cause entry id="48" has wrong 
   std::vector<Point> found;
   std::vector<Point> expected = {
     {3, 0}, {3, 1}, {3, 2}, {3, 3}, {3, 4},
@@ -495,7 +495,7 @@ TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
   // Entry id="155" twice, having 4,1 4,4 4,4 4,6 4,7
   // 4,1 twice
   // Node id="15" in two places, parent entries 206 & 207
-  // having entry id="169" (duplicate)
+  // having entry id="169" (duplicate) -> child node 12
   //
   // so, entries 206 & 207 have the same node child_id: 15
   found = tree.search({3, 0}, {4, 4});
@@ -617,7 +617,7 @@ TEST_CASE("aod rtree test: 4x4", "[aod::rtree][basic test]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("drtree3 test: 7x7", "[drtree3][basic test][FIXME]") {
+TEST_CASE("drtree3 test: 7x7", "[drtree3][basic test][fixme2]") {
   const int size = 7;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);

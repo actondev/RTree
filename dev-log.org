@@ -534,3 +534,223 @@ search Nid{0}#3Bid{6}{0, 1}
   - http://postgis.net/docs/support/rtree.pdf
   - https://github.com/aled/jsi
     seems close to the paper, LGLPL. Good for reference, how it follows the paper
+* <2022-04-07 Thu> debugging
+** scratch
+   #+begin_quote
+ +++ insert Eid{188} Did{63} {6, 3}
+ insert split Eid{188}Did{63} n Nid{12}, nn Nid{14} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{12} height 0 nn Nid{14} Eid{188} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ insert split Eid{197}Did{4294967295} n Nid{10}, nn Nid{15} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{10} height 1 nn Nid{15} Eid{197} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+	 made entry Eid{206} child nn Nid{15}, inserting
+ insert plain : Eid{206}Did{4294967295} Nid{10}
+ --- adjust tree n Nid{10} height 1 nn Nid{4294967295} Eid{206} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{4294967295}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{15}
+	 made entry Eid{207} child nn Nid{15}, inserting
+ insert plain : Eid{207}Did{4294967295} Nid{2}
+ --- adjust tree n Nid{2} height 1 nn Nid{4294967295} Eid{207} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{2},Eid{4294967295}} nn Nid{4294967295}
+ +++ insert Eid{208} Did{64} {6, 4}
+
+   #+end_quote
+
+   with copy of traversal for adjust_tree
+   #+begin_quote
+ +++ insert Eid{188} Did{63} {6, 3}
+ insert split Eid{188}Did{63} n Nid{12}, nn Nid{14} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{12} height 0 nn Nid{14} Eid{188} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ insert split Eid{197}Did{4294967295} n Nid{10}, nn Nid{15} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{10} height 1 nn Nid{15} Eid{197} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+	 made entry Eid{206} child nn Nid{15}, inserting
+ insert plain : Eid{206}Did{4294967295} Nid{10}
+ --- adjust tree n Nid{10} height 1 nn Nid{4294967295} Eid{206} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{4294967295}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{15}
+	 made entry Eid{207} child nn Nid{15}, inserting
+ insert plain : Eid{207}Did{4294967295} Nid{2}
+ --- adjust tree n Nid{2} height 1 nn Nid{4294967295} Eid{207} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{2},Eid{4294967295}} nn Nid{4294967295}
+
+   #+end_quote
+
+   no change. I think m_traversal is modified only on public version of insert (choose_leaf)
+
+
+   traversal_offset
+   #+begin_quote
+ +++ insert Eid{188} Did{63} {6, 3}
+ insert split Eid{188}Did{63} n Nid{12}, nn Nid{14} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{12} height 0 nn Nid{14} Eid{188} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ insert split Eid{197}Did{4294967295} n Nid{10}, nn Nid{15} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ --- adjust tree n Nid{10} height 1 nn Nid{15} Eid{197} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+	 made entry Eid{206} child nn Nid{15}, inserting
+ insert plain : Eid{206}Did{4294967295} Nid{10}
+ --- adjust tree n Nid{10} height 1 nn Nid{4294967295} Eid{206} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{4294967295}
+  .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{15}
+	 made entry Eid{207} child nn Nid{15}, inserting
+ insert plain : Eid{207}Did{4294967295} Nid{2}
+ --- adjust tree n Nid{2} height 1 nn Nid{4294967295} Eid{207} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  .. adjust tree Parent{Nid{2},Eid{4294967295}} nn Nid{4294967295}
+ +++ insert Eid{208} Did{64} {6, 4}
+
+   #+end_quote
+** offset
+   #+begin_quote
++++ insert Eid{188} Did{63} {6, 3}
+insert split Eid{188}Did{63} n Nid{12}, nn Nid{14} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  traversal with offset Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+--- adjust tree n Nid{12} height 0 nn Nid{14} Eid{188} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ traversal with offset Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+insert split Eid{197}Did{4294967295} n Nid{10}, nn Nid{15} traversal {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+  traversal with offset Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+--- adjust tree n Nid{10} height 1 nn Nid{15} Eid{197} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ traversal with offset Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+	made entry Eid{206} child nn Nid{15}, inserting
+insert plain : Eid{206}Did{4294967295} Nid{10}
+--- adjust tree n Nid{10} height 1 nn Nid{4294967295} Eid{206} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ traversal with offset Traversal2{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, }
+ .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{4294967295}
+ .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{15}
+	made entry Eid{207} child nn Nid{15}, inserting
+insert plain : Eid{207}Did{4294967295} Nid{2}
+--- adjust tree n Nid{2} height 1 nn Nid{4294967295} Eid{207} parents {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+ traversal with offset Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+ .. adjust tree Parent{Nid{2},Eid{4294967295}} nn Nid{4294967295}
+
+   #+end_quote
+
+   #+begin_quote
++++ insert Eid{188} Did{63} {6, 3}
+internal insert Nid{12}Eid{188}Did{63} Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+.. split_and_insert 
+--- adjust tree n Nid{12} height 0 nn Nid{14} Eid{188}Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, Parent{Nid{12},Eid{188}}}
+internal insert Nid{10}Eid{197}Did{4294967295} Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+.. split_and_insert 
+--- adjust tree n Nid{10} height 1 nn Nid{15} Eid{197}Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+	made entry Eid{206} child nn Nid{15}, inserting
+internal insert Nid{10}Eid{206}Did{4294967295} Traversal2{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, }
+.. plain_insert
+--- adjust tree n Nid{10} height 1 nn Nid{4294967295} Eid{206}Traversal2{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, }
+ .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{4294967295}
+ .. adjust tree Parent{Nid{10},Eid{141}} nn Nid{15}
+	made entry Eid{207} child nn Nid{15}, inserting
+internal insert Nid{2}Eid{207}Did{4294967295} Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+.. plain_insert
+--- adjust tree n Nid{2} height 1 nn Nid{4294967295} Eid{207}Traversal1{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{141}}, Parent{Nid{12},Eid{169}}, }
+ .. adjust tree Parent{Nid{2},Eid{4294967295}} nn Nid{4294967295}
+
+   #+end_quote
+
+   #+begin_quote
++++ insert Eid{197} Did{63} {6, 3}
+internal insert Nid{13}Eid{197}Did{63} Traversal0{Parent{Nid{11},Eid{4294967295}}, Parent{Nid{10},Eid{150}}, Parent{Nid{13},Eid{178}}, Parent{Nid{13},Eid{197}}}
+.. split_and_insert 
+--- adjust tree n Nid{13} height 0 nn Nid{15} Eid{197}Traversal0{Parent{Nid{11},Eid{4294967295}}, Parent{Nid{10},Eid{150}}, Parent{Nid{13},Eid{178}}, Parent{Nid{13},Eid{197}}}
+	made entry Eid{206} child nn Nid{15}, inserting
+internal insert Nid{10}Eid{206}Did{4294967295} Traversal3{Parent{Nid{11},Eid{4294967295}}, }
+.. split_and_insert 
+--- adjust tree n Nid{10} height 1 nn Nid{16} Eid{206}Traversal3{Parent{Nid{11},Eid{4294967295}}, }
+internal insert Nid{11}Eid{215}Did{4294967295} Traversal4{}
+.. plain_insert
+--- adjust tree n Nid{11} height 2 nn Nid{4294967295} Eid{215}Traversal4{}
+ .. adjust tree Parent{Nid{11},Eid{4294967295}} nn Nid{4294967295}
+ .. adjust tree Parent{Nid{10},Eid{150}} nn Nid{16}
+internal insert Nid{11}Eid{216}Did{4294967295} Traversal4{}
+.. plain_insert
+--- adjust tree n Nid{11} height 2 nn Nid{4294967295} Eid{216}Traversal4{}
+ .. adjust tree Parent{Nid{11},Eid{4294967295}} nn Nid{4294967295}
+
+   #+end_quote
+** notes
+   data id 40, 63 is duplicate. right after insertion of 6, 3 (data id 63)
+   node id 16 is duplicate, which has height 1 (so its children are duplicate
+
+   there's sth wrong about insert & adjust_tree. who is responsible of what?
+
+   #+begin_quote
++++ insert Eid{197} Did{63} {6, 3}
+>>> internal insert Nid{13}Eid{197}Did{63} Traversal0{Parent{Nid{11},Eid{4294967295}}, Parent{Nid{10},Eid{150}}, Parent{Nid{13},Eid{178}}, Parent{Nid{13},Eid{197}}}
+    split_and_insert 
+    adjust_tree, nn Nid{15}
+>>> adjust tree n Nid{13} height 0 nn Nid{15} Eid{197}Traversal0{Parent{Nid{11},Eid{4294967295}}, Parent{Nid{10},Eid{150}}, Parent{Nid{13},Eid{178}}, Parent{Nid{13},Eid{197}}}
+.. inserting nn, made entry Eid{206} child nn Nid{15}
+>>> internal insert Nid{10}Eid{206}Did{4294967295} Traversal3{Parent{Nid{11},Eid{4294967295}}, }
+    split_and_insert 
+    adjust_tree, nn Nid{16}
+>>> adjust tree n Nid{10} height 1 nn Nid{16} Eid{206}Traversal3{Parent{Nid{11},Eid{4294967295}}, }
+.. inserting nn, made entry Eid{215} child nn Nid{16}
+>>> internal insert Nid{11}Eid{215}Did{4294967295} Traversal4{}
+    plain_insert
+    adjust_tree, nn Nid{4294967295}
+>>> adjust tree n Nid{11} height 2 nn Nid{4294967295} Eid{215}Traversal4{}
+<<< adjust tree
+<<< internal_insert, nn Nid{4294967295}
+<<< adjust tree
+<<< internal_insert, nn Nid{16}
+.. inserting nn, made entry Eid{216} child nn Nid{16}
+>>> internal insert Nid{11}Eid{216}Did{4294967295} Traversal4{}
+    plain_insert
+    adjust_tree, nn Nid{4294967295}
+>>> adjust tree n Nid{11} height 2 nn Nid{4294967295} Eid{216}Traversal4{}
+<<< adjust tree
+<<< internal_insert, nn Nid{4294967295}
+<<< adjust tree
+<<< internal_insert, nn Nid{15}
+Node Nid{16} already in the container
+   #+end_quote
+** <2022-04-08 Fri> debug
+   calling adjust_tree only from public insert, not from internal insert
+   <2022-04-08 Fri 16:38> fixed?
+   
+   5x5
+   #+begin_quote
++++ insert Eid{80} Did{27} {4, 3}
+>>> internal insert Nid{4}Eid{80}Did{27} Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{4},Eid{64}}, Parent{Nid{4},Eid{80}}}
+:: distributed entries
+<Node id="4" height="0" children="5" >
+ <Entry id="16" rect_id="22" bounds="{1, 2}...{1, 2}" >
+ <Data id="8" data="{1, 2}"/>
+ </Entry>
+ <Entry id="35" rect_id="41" bounds="{1, 3}...{1, 3}" >
+ <Data id="9" data="{1, 3}"/>
+ </Entry>
+ <Entry id="49" rect_id="55" bounds="{2, 2}...{2, 2}" >
+ <Data id="14" data="{2, 2}"/>
+ </Entry>
+ <Entry id="79" rect_id="85" bounds="{4, 2}...{4, 2}" >
+ <Data id="26" data="{4, 2}"/>
+ </Entry>
+ <Entry id="80" rect_id="86" bounds="{4, 3}...{4, 3}" >
+ <Data id="27" data="{4, 3}"/>
+ </Entry>
+</Node>
+
+<Node id="6" height="0" children="4" >
+ <Entry id="67" rect_id="73" bounds="{3, 5}...{3, 5}" >
+ <Data id="23" data="{3, 5}"/>
+ </Entry>
+ <Entry id="66" rect_id="72" bounds="{3, 4}...{3, 4}" >
+ <Data id="22" data="{3, 4}"/>
+ </Entry>
+ <Entry id="55" rect_id="61" bounds="{3, 2}...{3, 2}" >
+ <Data id="20" data="{3, 2}"/>
+ </Entry>
+ <Entry id="65" rect_id="71" bounds="{3, 3}...{3, 3}" >
+ <Data id="21" data="{3, 3}"/>
+ </Entry>
+</Node>
+
+    split_and_insert 
+    adjust_tree, nn Nid{6}
+<<< internal_insert, nn Nid{6}
+>>> adjust tree n Nid{4} height 0 nn Nid{6} Eid{80}Traversal0{Parent{Nid{2},Eid{4294967295}}, Parent{Nid{4},Eid{64}}, Parent{Nid{4},Eid{80}}}
+.. inserting nn, made entry Eid{89} child nn Nid{6}
+>>> internal insert Nid{2}Eid{89}Did{4294967295} Traversal3{}
+    plain_insert
+    adjust_tree, nn Nid{4294967295}
+<<< internal_insert, nn Nid{4294967295}
+<<< adjust tree
+
+   #+end_quote
