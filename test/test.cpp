@@ -41,6 +41,22 @@ struct Grid {
 
 using Callback = std::function<bool(Point, const double *, const double *)>;
 
+void shuffle_deterministic(Grid& grid) {
+  std::mt19937 gen(0);
+  std::shuffle(std::begin(grid.points), std::end(grid.points), gen);
+}
+
+// for debugging, creating the "expected" vectors
+void sort_points(std::vector<Point> &points) {
+  std::sort(points.begin(), points.end(), [](const Point& a, const Point& b) {
+    if( a[0] == b[0] ) {
+      return a[1] < b[1];
+    } else {
+      return a[0] < b[0];
+    }
+  });
+}
+
 /**
  * see https://stackoverflow.com/a/49514906/8720686
  * Given length=3,dims=2 it gives
@@ -48,7 +64,7 @@ using Callback = std::function<bool(Point, const double *, const double *)>;
  *  {1, 0}, {1, 1}, {1, 2},
  *  {2, 0}, {2, 1}, {2, 2}}
  */
-Grid make_grid(int length, int dims = 2) {
+Grid make_grid(int length, int dims = 2, bool shuffle = false) {
   Grid grid;
   grid.dims = dims;
   int size = pow(length, dims);
@@ -63,6 +79,9 @@ Grid make_grid(int length, int dims = 2) {
       int mod = x % length;
       el[dims - dim - 1] = mod;
     }
+  }
+  if(shuffle) {
+    shuffle_deterministic(grid);
   }
 
   return grid;
@@ -115,21 +134,6 @@ RTree<Point, double, DIMS> grid_to_rtree_template(const Grid &grid, int dims = 0
   return tree;
 }
 
-void shuffle_deterministic(Grid& grid) {
-  std::mt19937 gen(0);
-  std::shuffle(std::begin(grid.points), std::end(grid.points), gen);
-}
-
-// for debugging, creating the "expected" vectors
-void sort_points(std::vector<Point> &points) {
-  std::sort(points.begin(), points.end(), [](const Point& a, const Point& b) {
-    if( a[0] == b[0] ) {
-      return a[1] < b[1];
-    } else {
-      return a[0] < b[0];
-    }
-  });
-}
 
 TEST_CASE("basic operations") {
   int dims = 2;
@@ -216,7 +220,7 @@ TEST_CASE("bounds after removals & insertions") {
 }
 
 // total heap usage: 83,986 allocs, 83,986 frees, 5,511,972 bytes allocated
-TEST_CASE("10x4d drtree", "[benchmark][drtree]") {
+TEST_CASE("10x4d drtree", "[.skip]") {
   auto grid = make_grid(10, 4); // 10k points
 
   auto t1 = now();
@@ -250,7 +254,7 @@ TEST_CASE("10x4d drtree", "[benchmark][drtree]") {
 
 // 4d normal: total heap usage: 107,771 allocs, 107,771 frees, 5,694,676 bytes allocated
 // 8d MAXDIMS: total heap usage: 107,771 allocs, 107,771 frees, 6,813,908 bytes allocated
-TEST_CASE("10x4d rtree", "[benchmark][rtree]") {
+TEST_CASE("10x4d rtree", "[.skip]") {
 #define MAXDIMS 4
   int dims = 4;
   auto grid = make_grid(10, dims);
@@ -284,17 +288,20 @@ TEST_CASE("10x4d rtree", "[benchmark][rtree]") {
   
 }
 
+const int benchmark_size = 200;
+const int searches = 10000;
+const char* search_str = "search x10000 ";
 // total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
 // RECT_ONE_ARRAY: total heap usage: 119,490 allocs, 119,490 frees, 10,073,986 bytes allocated
 TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
-  auto grid = make_grid(200, 2); // 100x100=>10k points
+  auto grid = make_grid(benchmark_size, 2); // 100x100=>10k points
   // cout << pp(grid.points) << endl;
 
   auto t1 = now();
   drtree<Point> tree = grid_to_rtree(grid);
   auto t2 = now();
   WARN("init took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.Count() == 200*200);
+  REQUIRE(tree.Count() == benchmark_size*benchmark_size);
 
   // return;
   double low[2] = {5, 2};
@@ -305,12 +312,12 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
     return true;
   };
   t1 = now();
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < searches; i++) {
     found.clear();
     tree.Search(low, high, cb);
   }
   t2 = now();
-  WARN("search x1000 took " << duration_ms(t2 - t1) << " ms ");
+  WARN(search_str << duration_ms(t2 - t1) << " ms ");
   REQUIRE(found.size() == 6);
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -337,16 +344,14 @@ TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
 // 4 MAXDIMS: total heap usage: 218,693 allocs, 218,693 frees, 12,036,490 bytes allocated
 TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
 #define MAXDIMS 2
-  int dims = 2;
-  const int size = 200;
-  
-  auto grid = make_grid(size, dims);
+  int dims = 2
+  auto grid = make_grid(benchmark_size, dims);
 
   auto t1 = now();
   RTree<Point, double, MAXDIMS> tree = grid_to_rtree_template<MAXDIMS>(grid);
   auto t2 = now();
   
-  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
+  WARN("init size " << benchmark_size << " took " << duration_ms(t2 - t1) << "ms");
   // return;
 
   double low[2] = {5, 2};
@@ -357,12 +362,12 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
     return true;
   };
   t1 = now();
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < searches; i++) {
     found.clear();
     tree.Search(low, high, cb);
   }
   t2 = now();
-  WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
+  WARN(search_str << duration_ms(t2 - t1) << " ms ");
   REQUIRE(found.size() == 6);
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -383,64 +388,13 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
   #undef MAXDIMS
 }
 
-TEST_CASE("200x2d drtree2", "[benchmark][drtree2]") {
-  // hmm.. running out of rect ids with 200x200? (100x100 works)
-  // and uint16_t
-  auto grid = make_grid(200, 2); // 100x100=>10k points
-  // cout << pp(grid.points) << endl;
-
-  auto t1 = now();
-  drtree2<Point> tree = grid_to_drtree2(grid);
-  auto t2 = now();
-  WARN("init took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.Count() == 200*200);
-
-  // return;
-  double low[2] = {5, 2};
-  double high[2] = {6, 4};
-  std::vector<Point> found;
-  Callback cb = [&](Point node, const double *low, const double *high) {
-    found.push_back(node);
-    return true;
-  };
-  t1 = now();
-  // for (int i = 0; i < 1000; i++) {
-    found.clear();
-    tree.Search(low, high, cb);
-  // }
-  t2 = now();
-  // WARN("search x1000 took " << duration_ms(t2 - t1) << " ms ");
-  // TODO found 0?
-  REQUIRE(found.size() == 6);
-  std::vector<Point> expected = {
-    { 5.0, 2.0 },
-    { 5.0, 3.0 },
-    { 5.0, 4.0 },
-    { 6.0, 2.0 },
-    { 6.0, 3.0 },
-    { 6.0, 4.0 },
-  };
-  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
-
-  // t1 = now();
-  // drtree<Point> tree2 = tree;
-  // t2 = now();
-  // WARN("copy took " << duration_ms(t2 - t1) << " ms ");
-  // REQUIRE(tree2.Count() == tree.Count());
-
-  // found.clear();
-  // tree2.Search(low, high, cb);
-  // REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
-}
-
 TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
-  const int size = 200;
-  auto grid = make_grid(size); // TODO crashes with 3 (works with 2)
+  auto grid = make_grid(benchmark_size); // TODO crashes with 3 (works with 2)
   auto t1 = high_resolution_clock::now();
   drtree3<Point> tree = grid_to_drtree3(grid);
   auto t2 = high_resolution_clock::now();
-  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.size() == size*size);
+  WARN("init size " << benchmark_size << " took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == benchmark_size*benchmark_size);
 
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -456,11 +410,11 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 
   t1 = now();
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < searches; i++) {
     tree.search(low, high, found);
   }
   t2 = now();
-  WARN("search x 10000 took " << duration_ms(t2 - t1) << " ms ");
+  WARN(search_str << duration_ms(t2 - t1) << " ms ");
 
   t1 = now();
   drtree3<Point>tree2 = tree;
@@ -472,9 +426,46 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
   REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
-  // 6x6 not working
-  const int size = 10; // todo 10
+TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
+  auto grid = make_grid(benchmark_size, 2); // TODO crashes with 3 (works with 2)
+  auto t1 = high_resolution_clock::now();
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  auto t2 = high_resolution_clock::now();
+  WARN("init size " << benchmark_size << " took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == benchmark_size*benchmark_size);
+
+  std::vector<Point> expected = {
+    { 5.0, 2.0 },
+    { 5.0, 3.0 },
+    { 5.0, 4.0 },
+    { 6.0, 2.0 },
+    { 6.0, 3.0 },
+    { 6.0, 4.0 },
+  };
+  std::vector<double> low = {5 , 2};
+  std::vector<double> high = {6 , 4};
+  auto found = tree.search(low, high);
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+
+  t1 = now();
+  for (int i = 0; i < searches; i++) {
+    tree.search(low, high, found);
+  }
+  t2 = now();
+  WARN(search_str << duration_ms(t2 - t1) << " ms ");
+
+  t1 = now();
+  aod::rtree<Point>tree2 = tree;
+  t2 = now();
+  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
+
+  REQUIRE(tree2.size() == tree.size());
+  auto found2 = tree2.search(low, high);
+  REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("aod::rtree temp", "[aod::rtree]") {
+  const int size = 10;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   aod::rtree<Point> tree = grid_to_aod_rtree(grid);

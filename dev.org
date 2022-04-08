@@ -14,11 +14,14 @@ meson configure build -Doptimization=0
 meson test -C build -v
 
 ./build/test/run-tests "[benchmark]"
+time ./build/test/run-tests "[aod::rtree][benchmark]"
   #+end_src
 * valgrind (profiling, memory leaks etc)
   #+begin_src sh
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d rtree"
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d drtree3"
+
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./build/test/run-tests "200x2d aod::rtree"
   #+end_src
 ** callgrind (performance)
    #+begin_src sh
@@ -26,6 +29,7 @@ valgrind --tool=callgrind ./build/test/run-tests "200x2d rtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree2"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree3"
+valgrind --tool=callgrind ./build/test/run-tests "200x2d aod::rtree"
    #+end_src
 ** massif (memory allocations)
    massif-visualizer tool

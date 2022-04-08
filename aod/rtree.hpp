@@ -58,8 +58,8 @@ struct Parent {
 };
 
 struct Node {
-  bool is_internal() { return (height > 0); } // Not a leaf, but a internal node
-  bool is_leaf() { return (height == 0); }    // A leaf, contains data
+  bool is_internal() const { return (height > 0); } // Not a leaf, but a internal node
+  bool is_leaf() const { return (height == 0); }    // A leaf, contains data
 
   int count = 0;  ///< children entries count. Between m and M
   int height = 0; ///< zero for leaf, positive otherwise
@@ -135,7 +135,7 @@ private:
 
   int m_dims;
 
-  size_t m_size;
+  size_t m_size = 0;
   id_t m_rects_count = 0;
   id_t m_entries_count = 0;
   id_t m_nodes_count = 0;
@@ -165,10 +165,6 @@ private:
     Nid nid{m_nodes_count++};
     m_nodes.resize(m_nodes_count);
     m_node_entries.resize(m_nodes_count * M);
-    for (int i = 0; i < M; i++) {
-      // TODO needed?
-      set_node_entry(nid, i, make_entry_id());
-    }
     return nid;
   }
 
@@ -245,8 +241,7 @@ private:
 
   /// Ascend from leaf node L to the root, adjusting rectangles and
   /// propagating node splits as necessary
-  void adjust_tree(Nid n, Nid nn, Eid e, std::vector<Parent> traversal,
-                   int traversal_offset);
+  void adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &traversal);
   std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                           const std::array<int, 2> &seeds);
@@ -256,8 +251,7 @@ private:
   bool rects_overlap(Rid, Rid);
 
   /// insert entry into leaf node: if a split occured, returns a valid new node
-  Nid insert(Nid, Eid, const std::vector<Parent> &traversal,
-             int traversal_offset);
+  Nid insert(Nid, Eid);
   void plain_insert(Nid, Eid);
   Nid choose_leaf(Rid r, std::vector<Parent> &traversal);
   Nid choose_node(Nid n, Rid r, int height, std::vector<Parent> &traversal);
@@ -407,8 +401,8 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   set_data(entry.data_id, data);
   Rid r = entry.rect_id;
 
-  cout << endl;
-  cout << "+++ insert " << e << " " << entry.data_id << " " << pp(data) << endl;
+  // cout << endl;
+  // cout << "+++ insert " << e << " " << entry.data_id << " " << pp(data) << endl;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -421,41 +415,35 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   p.entry = e;
   p.node = n;
   m_traversal.push_back(p);
-  Nid nn = insert(n, e, m_traversal, 0);
+  Nid nn = insert(n, e);
 
-  adjust_tree(n, nn, e, m_traversal, 0);
+  adjust_tree(n, nn, e, m_traversal);
 
   // TODO debug flag for duplicate nodes check
-  bool has_duplicates = has_duplicate_nodes();
-  if(has_duplicates) {
-    std::ostringstream os;
-    std::ofstream ofs("aod-rtree-duplicates.xml", std::ofstream::out);
-    ofs << to_xml();
-    ofs.close();
-  }
-  ASSERT(has_duplicates == false);
+  // bool has_duplicates = has_duplicate_nodes();
+  // if(has_duplicates) {
+  //   std::ostringstream os;
+  //   std::ofstream ofs("aod-rtree-duplicates.xml", std::ofstream::out);
+  //   ofs << to_xml();
+  //   ofs.close();
+  // }
+  // ASSERT(has_duplicates == false);
 }
 
-PRE Nid QUAL::insert(Nid n, Eid e, const std::vector<Parent> &traversal,
-                     int traversal_offset) {
+PRE Nid QUAL::insert(Nid n, Eid e) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
-  // const Entry &entry = get_entry(e);
-  Did did = get_entry(e).data_id;
-  cout << ">>> internal insert " << n << e << did << " ";
-  cout << traversal_to_string(traversal, traversal_offset) << endl;
-
   if (node.count < M) {
-    cout << "    plain_insert" << endl;
+    // cout << "    plain_insert" << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    cout << "    split_and_insert " << endl;
+    // cout << "    split_and_insert " << endl;
   }
   // NB: nn (new node - afte split_and_insert) isn't yet a part of the tree!
 
-  cout << "<<< internal_insert, nn " << nn << endl;
+  // cout << "<<< internal_insert, nn " << nn << endl;
   return nn;
 }
 
@@ -597,14 +585,12 @@ PRE void QUAL::distribute_entries_naive(Nid n, Nid nn,
 }
 
 // todo: remove traversal_offset? this no longer gets called recursively
-PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, std::vector<Parent> parents,
-                           int traversal_offset) {
+PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const std::vector<Parent> &parents) {
   Node &node = get_node(n);
-  cout << ">>> adjust tree n " << n << " height " << node.height << " nn " << nn
-       << " " << e;
-  cout << traversal_to_string(parents, traversal_offset) << endl;
-  for (int i = parents.size() - 1 - traversal_offset; i >= 0;
-       ++traversal_offset, i = parents.size() - 1 - traversal_offset) {
+  // cout << ">>> adjust tree n " << n << " height " << node.height << " nn " << nn
+  //      << " " << e;
+  // cout << traversal_to_string(parents, traversal_offset) << endl;
+  for (int i = parents.size() - 1; i >= 0; --i) {
     const Parent &parent = parents[i];
     const Node &parent_node = get_node(parent.node);
     if (parent_node.height == 0) {
@@ -624,10 +610,10 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, std::vector<Parent> parents,
       if (nn) {
         // if split (new node), need to readjust the parent entry
         // rect. Entries are reorganized!
-        cout << "    updating parent rect: " << parent << endl;
+        // cout << "    updating parent rect: " << parent << endl;
         update_entry_rect(parent.entry);
       } else {
-        cout << "    absorbing newly inserted entry into parent" << parent << endl;
+        // cout << "    absorbing newly inserted entry into parent" << parent << endl;
         // if no split (new node), then just accomodate the new entry
         const Entry &parent_entry = get_entry(parent.entry);
         combine_rects(parent_entry.rect_id, get_entry(e).rect_id,
@@ -639,16 +625,16 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, std::vector<Parent> parents,
     if (nn && parent_node.height > 0) {
       Eid ne = make_entry_id();
       Entry &new_entry = get_entry(ne);
-      cout << ".. inserting nn, made entry " << ne << " child nn " << nn << endl;
+      // cout << ".. inserting nn, made entry " << ne << " child nn " << nn << endl;
       new_entry.child_id = nn;
       update_entry_rect(ne);
 
-      nn = insert(parent.node, ne, parents, traversal_offset + 1);
+      nn = insert(parent.node, ne);
     }
   }
   if (n == m_root_id && nn) {
     // Root split!
-    cout << "    root split " << n << nn << endl;
+    // cout << "    root split " << n << nn << endl;
     // Important: make_node_id before getting nodes! Otherwise,
     // references might be invalid.
     Nid new_root_id = make_node_id();
@@ -673,7 +659,7 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, std::vector<Parent> parents,
 
     m_root_id = new_root_id;
   }
-  cout << "<<< adjust tree" << endl;
+  // cout << "<<< adjust tree" << endl;
 }
 
 /// Pick first entry for each group. We get 2 groups after splitting a
@@ -757,17 +743,17 @@ PRE void QUAL::search(const Vec &low, const Vec &high,
 }
 
 PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
-  Node &node = get_node(n);
+  const Node &node = get_node(n);
   if (node.is_internal()) {
     for (int i = 0; i < node.count; ++i) {
       Eid e = get_node_entry(n, i);
-      Entry &entry = get_entry(e);
+      const Entry &entry = get_entry(e);
       // hm, though I could use rect_contains, but I may be asking for a big
       // rect (search), not a specific rect I have inserted thus, the entry rect
       // (in this case) can not contain the query rect
       // TODO different modes for search? When asking for only one rect (or eg
       // querying a point rect), then I should use rect_contains
-      if (rects_overlap(entry.rect_id, r)) {
+      if (rects_overlap(r, entry.rect_id)) {
         if (!search(entry.child_id, r, found_count, cb)) {
           // stop searching
           return false;
@@ -778,7 +764,7 @@ PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
     // leaf
     for (int i = 0; i < node.count; ++i) {
       Eid e = get_node_entry(n, i);
-      Entry &entry = get_entry(e);
+      const Entry &entry = get_entry(e);
       // TODO define some algorithm for search: overlap vs contain, etc..
       if (rects_overlap(r, entry.rect_id)) {
         if (!cb(get_data(entry.data_id))) {
