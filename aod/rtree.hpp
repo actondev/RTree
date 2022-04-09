@@ -26,6 +26,10 @@ struct Id {
   friend bool operator==(const Id &lhs, const Id &rhs) {
     return lhs.id == rhs.id;
   }
+  // for ordered set
+  friend bool operator<(const Id &lhs, const Id &rhs) {
+    return lhs.id < rhs.id;
+  }
 };
 
 // Rect Id
@@ -269,11 +273,18 @@ private:
   /// entries. Propagate node elimination upward as necessary. Adjust
   /// all covering rectagles on the path to the root, making them
   /// smaller if possible
-  void condense_tree(Node T);
 
   void remove(Nid n, Rid r, int &removed, Traversals &, const Traversal & cur_traversal, Predicate cb);
+
+  bool remove_node_entry(Nid n, Eid e);
+  void remove_node_entry(Nid n, int idx);
+
+  /// Called after removal of Node(s), by passing the traversal(s) of
+  /// the tree that took place for the removed entries
+  void condense(const Traversals &);
+
   int count(Nid n);
-  void count(Nid n, int&); // recursive
+  void count(Nid n, int &); // recursive
 
   // TODO signatures
 
@@ -796,23 +807,23 @@ PRE int QUAL::remove(const Vec &low, const Vec &high) {
     rect_high_ref(m_temp_rect, i) = high[i];
   }
   int removed = 0;
-  std::vector<Traversal> remove_traverals;
-  Predicate cb = [] (const DATATYPE& data ) {
-    return true;
-  };
+  Traversals remove_traverals;
+  Predicate cb = [](const DATATYPE &data) { return true; };
   Traversal cur_traversal;
   Parent p;
   p.node = m_root_id;
   cur_traversal.push_back(p);
   remove(m_root_id, m_temp_rect, removed, remove_traverals, cur_traversal, cb);
 
-  cout << "remove_traverals " << pp(remove_traverals) << endl;
-  // TODO condense_tree
+  // cout << "remove traverals " << endl << pp(remove_traverals) << endl <<
+  // endl;
+  condense(remove_traverals);
   m_size -= removed;
   return removed;
 }
 
-PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals, const Traversal &cur_traversal, Predicate cb) {
+PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals,
+                      const Traversal &cur_traversal, Predicate cb) {
   // cout << "cur traversal " << pp(cur_traversal) << endl;
   Node &node = get_node(n);
   if (node.is_internal()) {
@@ -825,7 +836,8 @@ PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals, const 
         p.entry = e;
         p.node = entry.child_id;
         sub_traversal.push_back(p);
-        // cout << "here , cur_traversal " << pp(cur_traversal) << " sub " << pp(sub_traversal) << endl;
+        // cout << "here , cur_traversal " << pp(cur_traversal) << " sub " <<
+        // pp(sub_traversal) << endl;
         remove(entry.child_id, r, counter, traversals, sub_traversal, cb);
       }
     }
@@ -839,10 +851,8 @@ PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals, const 
         if (cb(get_data(entry.data_id))) {
           removed = true;
           ++counter;
-          // TODO refactor into a function
-          set_node_entry(n, i, get_node_entry(n, node.count-1));
-          --node.count;
-          --i; // gotta revisit i again
+          remove_node_entry(n, i);
+          --i; // need to revisit i again (remove_node_entry shuffles entries)
         }
       }
     }
@@ -850,6 +860,38 @@ PRE void QUAL::remove(Nid n, Rid r, int &counter, Traversals &traversals, const 
       traversals.push_back(cur_traversal);
     }
   }
+}
+
+PRE bool QUAL::remove_node_entry(Nid n, Eid e) {
+  Node &node = get_node(n);
+  int idx = -1;
+  for (int i = 0; i < node.count; ++i) {
+    if (get_node_entry(n, i) == e) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx == -1)
+    return false;
+
+  set_node_entry(n, idx, get_node_entry(n, node.count - 1));
+  --node.count;
+  return true;
+}
+
+PRE void QUAL::remove_node_entry(Nid n, int idx) {
+  Node &node = get_node(n);
+  ASSERT(idx < node.count);
+  set_node_entry(n, idx, get_node_entry(n, node.count - 1));
+  --node.count;
+}
+
+PRE void QUAL::condense(const Traversals& traversals) {
+  cout << ">>> condense tree" << endl;
+  for (const Traversal& traversal : traversals) {
+    cout << "    " << pp(traversal) << endl;
+  }
+  cout << "<<< condense tree" << endl;
 }
 
 PRE int QUAL::count(Nid n) {

@@ -883,3 +883,44 @@ warning:
   copy took 3 ms 
 
    #+end_quote
+* <2022-04-09 Sat> removals
+** 8x8
+   #+begin_quote
+>>> condense tree
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{3},Eid{16}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{1},Eid{10}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{6},Eid{41}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{7},Eid{45}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{53}}, Parent{Nid{8},Eid{48}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{53}}, Parent{Nid{0},Eid{9}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{53}}, Parent{Nid{9},Eid{52}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{10},Eid{53}}, Parent{Nid{4},Eid{26}}}
+    {Parent{Nid{2},Eid{4294967295}}, Parent{Nid{12},Eid{69}}}
+<<< condense tree
+   #+end_quote
+** deletion algorithm
+   http://albert-jan.yzelman.net/PDFs/yzelman07b.pdf
+
+   #+begin_quote
+Algorithm A.3.3 Basic R-tree Deletion Algorithm
+This algorithm deletes an object o, stored at the tree with root r.
+Delete(r, o):
+1: Find the leaf v which contains o
+2: Remove o from v
+3: Let S be an empty set
+4: X = v
+5: while X != r do
+  6: if X has less than m children then
+    7: Add all children of X to S
+    8: Remove X from its parent p
+    9: X = p
+  10: end if
+11: end while
+12: Re-insert all entries in S to the R-tree defined by r
+13: if X has only one child c then {At this point, X is the root}
+  14: Let X = c
+15: end if
+   #+end_quote
+* r-star tree?
+  https://tildesites.bowdoin.edu/~ltoma/teaching/cs340/spring08/Papers/Rstar3.pdf
+  
