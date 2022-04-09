@@ -902,25 +902,22 @@ PRE void QUAL::remove_node_entry(Nid n, int idx) {
 }
 
 PRE void QUAL::condense(const Traversals& traversals) {
-  cout << ">>> condense tree" << endl;
+  // cout << ">>> condense tree" << endl;
   std::set<Eid> entries_to_reinsert;
   for (const Traversal& traversal : traversals) {
-    cout << "    " << pp(traversal) << endl;
+    // cout << "    " << pp(traversal) << endl;
+    // updating last traversal entry, since the other ones are updated when updating the parent p
+    const Parent& last = traversal.back();
+    update_entry_rect(last.entry);
     for(int i = traversal.size()-1; i >= 1; --i) {
       const Parent& x = traversal[i];
       Node& node = get_node(x.node);
       if(node.count < m) {
         const Parent& p = traversal[i-1];
         if (node.count == 0) {
-          cout << "just removing node, 0 count " << x.node << endl;
+          // should I just go on? seems like this was already processed
         }
-
-        // cout << "removing node " << x.node << x.entry << " from parent " << p.node << endl;
         // Remove X from its parent p
-        cout << "removing " << x.entry << " from " << p.node << endl;
-        if(node.count > 0 ) {
-          cout << "reinserting children of " << x.node << endl;
-        }
         for (int j = 0; j < node.count; ++j) {
           // Add all children of X to S
           entries_to_reinsert.insert(get_node_entry(x.node, j));
@@ -936,24 +933,23 @@ PRE void QUAL::condense(const Traversals& traversals) {
       }
     }
   }
-  // cout << to_xml() << endl;
+  // skipping reinserting entries that point to empty node
   std::set<Eid>::iterator it = entries_to_reinsert.begin();
   while (it != entries_to_reinsert.end()) {
-    // copy the current iterator then increment it
     auto current = it++;
     const Entry &entry = get_entry(*current);
     const Nid n = entry.child_id;
     if (n && get_node(n).count == 0) {
-      cout << "removed from reinsert list: " << *current << endl;
+      // cout << "removed from reinsert list: " << *current << endl;
       entries_to_reinsert.erase(current);
     }
   }
 
-  cout << "reinsert " << pp(entries_to_reinsert) << endl;
+  // cout << "    reinsert " << pp(entries_to_reinsert) << endl;
   for(Eid e : entries_to_reinsert) {
     reinsert(e);
   }
-  cout << "<<< condense tree" << endl;
+  // cout << "<<< condense tree" << endl;
 }
 
 PRE int QUAL::count(Nid n) {

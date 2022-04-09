@@ -921,6 +921,8 @@ Delete(r, o):
   14: Let X = c
 15: end if
    #+end_quote
+** DONE <2022-04-09 Sat> removal seems to work
+   - [X] fix entry bounding rect
 * r-star tree?
   https://tildesites.bowdoin.edu/~ltoma/teaching/cs340/spring08/Papers/Rstar3.pdf
   
