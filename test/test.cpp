@@ -720,7 +720,6 @@ TEST_CASE("aod::rtree 8x8", "[aod::rtree][fixme]") {
   ofs << tree.to_xml();
   ofs.close();
 
-  return;
   int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
   // 2 horizontal stripes removed 2 rowsof 3 in bottom row & same in top
   // 2 * (size-2*retain_side)*retain_side = 2*4*2 = 16

@@ -91,7 +91,7 @@ std::ostream &operator<<(std::ostream &os, const Did &id) {
 }
 
 std::ostream &operator<<(std::ostream &os, const Parent &p) {
-  os << "Parent{" << p.node << "," << p.entry << "}";
+  os << "Parent{" << p.entry << "->" << p.node << "}";
   return os;
 }
 
@@ -242,6 +242,7 @@ public:
   Xml to_xml() { return Xml(this); }
 
 private:
+  void reinsert(Eid e);
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
   /// new node id
   Nid split_and_insert(Nid n, Eid e);
@@ -446,6 +447,20 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   //   ofs.close();
   // }
   // ASSERT(has_duplicates == false);
+}
+
+PRE void QUAL::reinsert(Eid e) {
+  m_traversal.clear();
+  const Entry& entry = get_entry(e);
+  int height = entry.child_id ? get_node(entry.child_id).height + 1 : 0;
+  Nid n = choose_node(m_root_id, entry.rect_id, height, m_traversal);
+  Parent p;
+  p.entry = e;
+  p.node = n;
+  m_traversal.push_back(p);
+  Nid nn = insert(n, e);
+
+  adjust_tree(n, nn, e, m_traversal);
 }
 
 PRE Nid QUAL::insert(Nid n, Eid e) {
@@ -888,8 +903,55 @@ PRE void QUAL::remove_node_entry(Nid n, int idx) {
 
 PRE void QUAL::condense(const Traversals& traversals) {
   cout << ">>> condense tree" << endl;
+  std::set<Eid> entries_to_reinsert;
   for (const Traversal& traversal : traversals) {
     cout << "    " << pp(traversal) << endl;
+    for(int i = traversal.size()-1; i >= 1; --i) {
+      const Parent& x = traversal[i];
+      Node& node = get_node(x.node);
+      if(node.count < m) {
+        const Parent& p = traversal[i-1];
+        if (node.count == 0) {
+          cout << "just removing node, 0 count " << x.node << endl;
+        }
+
+        // cout << "removing node " << x.node << x.entry << " from parent " << p.node << endl;
+        // Remove X from its parent p
+        cout << "removing " << x.entry << " from " << p.node << endl;
+        if(node.count > 0 ) {
+          cout << "reinserting children of " << x.node << endl;
+        }
+        for (int j = 0; j < node.count; ++j) {
+          // Add all children of X to S
+          entries_to_reinsert.insert(get_node_entry(x.node, j));
+        }
+        node.count = 0;
+        // this might return false, but it's fine
+        remove_node_entry(p.node, x.entry);
+        // adjust parent entry rect
+        if(p.entry) {
+          // if parent is root, it belongs to no entry
+          update_entry_rect(p.entry);
+        }
+      }
+    }
+  }
+  // cout << to_xml() << endl;
+  std::set<Eid>::iterator it = entries_to_reinsert.begin();
+  while (it != entries_to_reinsert.end()) {
+    // copy the current iterator then increment it
+    auto current = it++;
+    const Entry &entry = get_entry(*current);
+    const Nid n = entry.child_id;
+    if (n && get_node(n).count == 0) {
+      cout << "removed from reinsert list: " << *current << endl;
+      entries_to_reinsert.erase(current);
+    }
+  }
+
+  cout << "reinsert " << pp(entries_to_reinsert) << endl;
+  for(Eid e : entries_to_reinsert) {
+    reinsert(e);
   }
   cout << "<<< condense tree" << endl;
 }
