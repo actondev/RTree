@@ -685,7 +685,7 @@ TEST_CASE("drtree3 test: 8x8", "[drtree3][basic test]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("aod::rtree 8x8", "[aod::rtree][fixme]") {
+TEST_CASE("aod::rtree 8x8", "[aod::rtree]") {
   const int size = 8;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
@@ -723,6 +723,120 @@ TEST_CASE("aod::rtree 8x8", "[aod::rtree][fixme]") {
   int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
   // 2 horizontal stripes removed 2 rowsof 3 in bottom row & same in top
   // 2 * (size-2*retain_side)*retain_side = 2*4*2 = 16
+  REQUIRE(removed2 == 16);
+  REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
+  REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)
+
+  ofs = std::ofstream("aod-rtree-8x8-removed.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected = {
+    { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
+    { 0.0, 6.0 }, { 0.0, 7.0 }, { 1.0, 6.0 }, { 1.0, 7.0 },
+    { 6.0, 0.0 }, { 6.0, 1.0 }, { 7.0, 0.0 }, { 7.0, 1.0 },
+    { 6.0, 6.0 }, { 6.0, 7.0 }, { 7.0, 6.0 }, { 7.0, 7.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("aod::rtree 10x10", "[aod::rtree][fixme]") {
+  const int size = 10;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  REQUIRE(tree.size() == size*size);
+
+  std::ofstream ofs;
+  
+  ofs = std::ofstream("aod-rtree-10x10-init.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+  
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+
+  found = tree.search({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(found.size() == 60);
+  // horizontal: 10 * (10-2*retain_side) = 10*(10-2*2) = 60
+  int removed1 = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed1 == 60);
+  ofs = std::ofstream("aod-rtree-10x10-removed-1.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+  REQUIRE(tree.size() == size*size - removed1);
+  found = tree.search({0, 0}, {10, 10});
+  REQUIRE(found.size() == size*size - removed1);
+
+  // return;
+
+  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
+  // 2 horizontal stripes removed 2 rowsof n in bottom row & same in top
+  // 2 * (size-2*retain_side)*retain_side = 2*(10-2*2)*2 = 2*6*2
+  REQUIRE(removed2 == 24);
+  REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
+  REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)
+
+  ofs = std::ofstream("aod-rtree-10x10-removed.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+
+  found = tree.search({0, 0}, {10, 10});
+  sort_points(found);
+  expected = {
+    { 0.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 0.0 }, { 1.0, 1.0 },
+    { 0.0, 8.0 }, { 0.0, 9.0 }, { 1.0, 8.0 }, { 1.0, 9.0 },
+    { 8.0, 0.0 }, { 8.0, 1.0 }, { 9.0, 0.0 }, { 9.0, 1.0 },
+    { 8.0, 8.0 }, { 8.0, 9.0 }, { 9.0, 8.0 }, { 9.0, 9.0 } };
+  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
+}
+
+TEST_CASE("aod::rtree 100x100 tests", "[aod::rtree][.skip]") {
+  const int size = 10;
+  auto grid = make_grid(size);
+  shuffle_deterministic(grid);
+  
+  aod::rtree<Point> tree = grid_to_aod_rtree(grid);
+  REQUIRE(tree.size() == size*size);
+
+  std::ofstream ofs;
+  
+  // ofs = std::ofstream("aod-rtree-8x8-init.xml", std::ofstream::out);
+  // ofs << tree.to_xml();
+  // ofs.close();
+  
+  std::vector<Point> expected;
+  std::vector<Point> found;
+  int removed;
+
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+
+  // horizontal: 100 * (100-2*retain_side) = 100*96
+  found = tree.search({0,retain_side},{size-1,size-1-retain_side});
+  // REQUIRE(found.size() == 2300);
+
+  int removed1 = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed1 == 9600);
+  REQUIRE(tree.size() == size*size - removed1);
+  found = tree.search({0, 0}, {100, 100});
+  REQUIRE(found.size() == size*size - removed1);
+
+  // ofs = std::ofstream("aod-rtree-100x100-removed-1.xml", std::ofstream::out);
+  // ofs << tree.to_xml();
+  // ofs.close();
+
+  return;
+  //  // vertical
+  // 2 horizontal stripes removed 2 rowsof 3 in bottom row & same in top
+  // 2 * (size-2*retain_side)*retain_side = 2*(100-2*2) = 16
+  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1});
   REQUIRE(removed2 == 16);
   REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
   REQUIRE(tree.size() == 16); // 4 left in each corner (2x2)

@@ -249,7 +249,7 @@ private:
 
   /// Ascend from leaf node L to the root, adjusting rectangles and
   /// propagating node splits as necessary
-  void adjust_tree(Nid n, Nid nn, Eid e, const Traversal &traversal);
+  void adjust_tree(const Traversal &traversal, Nid nn);
   std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                           const std::array<int, 2> &seeds);
@@ -329,11 +329,11 @@ PRE Nid QUAL::choose_node(Nid n, Rid r, int height, Traversal &traversal) {
     return n;
   }
   Eid subtree = choose_subtree(n, r);
+  Nid child = get_entry(subtree).child_id;
   Parent p;
   p.entry = subtree;
-  p.node = n;
+  p.node = child;
   traversal.push_back(p);
-  Nid child = get_entry(subtree).child_id;
 
   ASSERT(subtree);
   return choose_node(child, r, height, traversal);
@@ -430,13 +430,9 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 
   m_traversal.clear();
   Nid n = choose_leaf(entry.rect_id, m_traversal);
-  Parent p;
-  p.entry = e;
-  p.node = n;
-  m_traversal.push_back(p);
   Nid nn = insert(n, e);
 
-  adjust_tree(n, nn, e, m_traversal);
+  adjust_tree(m_traversal, nn);
 
   // TODO debug flag for duplicate nodes check
   // bool has_duplicates = has_duplicate_nodes();
@@ -460,7 +456,7 @@ PRE void QUAL::reinsert(Eid e) {
   m_traversal.push_back(p);
   Nid nn = insert(n, e);
 
-  adjust_tree(n, nn, e, m_traversal);
+  adjust_tree(m_traversal, nn);
 }
 
 PRE Nid QUAL::insert(Nid n, Eid e) {
@@ -512,6 +508,7 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   distribute_entries(n, nn, entries, seeds);
   // distribute_entries_naive(n, nn, entries);
 
+  // cout << " split and insert " << n << nn << endl;
   // cout << ":: distributed entries" << endl;
   // cout << node_to_string(n) << endl << node_to_string(nn) << endl;
   ASSERT(node.count + new_node.count == M + 1);
@@ -523,7 +520,6 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
 
 PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                                   const std::array<int, 2> &seeds) {
-  bool debug = entries[0].id == 38;
   const Node &node = get_node(n);
   const Node &new_node = get_node(nn);
 
@@ -618,14 +614,16 @@ PRE void QUAL::distribute_entries_naive(Nid n, Nid nn,
 }
 
 // todo: remove traversal_offset? this no longer gets called recursively
-PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const Traversal &parents) {
-  Node &node = get_node(n);
-  // cout << ">>> adjust tree n " << n << " height " << node.height << " nn " <<
-  // nn
-  //      << " " << e;
-  // cout << traversal_to_string(parents) << endl;
-  for (int i = parents.size() - 1; i >= 0; --i) {
-    const Parent &parent = parents[i];
+PRE void QUAL::adjust_tree(const Traversal &traversal, Nid nn) {
+  bool dbg = false;
+  // cout << ">>> adjust tree " << pp(traversal) << " nn " << nn << endl;
+  // cout << pp(parents) << endl;
+  Nid n;
+  // the entry that got inserted. Need to adjust parent rectangles to include this
+  Eid e = traversal.back().entry;
+  for (int i = traversal.size() - 1; i >= 0; --i) {
+    const Parent &parent = traversal[i];
+    n = parent.node;
     const Node &parent_node = get_node(parent.node);
     if (parent_node.height == 0) {
       // traversal contains also the newly inserted item, with the
@@ -638,7 +636,6 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const Traversal &parents) {
       // new node (nn)
       continue;
     }
-
     if (parent.entry) {
       // aka not root node. root node doesn't belong to an entry
       if (nn) {
@@ -657,38 +654,61 @@ PRE void QUAL::adjust_tree(Nid n, Nid nn, Eid e, const Traversal &parents) {
     // propagating new node (split) upwards.  The first parent is the
     // node leaf, thus we need to skip it for the node insertion
     if (nn && parent_node.height > 0) {
+      const Node& new_node = get_node(nn);
+      // cout << ".. parent node " << parent.node << "H" << parent_node.height
+      //      << " nn " << nn << "H" << new_node.height << endl;
+      bool valid = parent_node.height == new_node.height + 1;
+      if(!valid) {
+        std::ofstream ofs("aod-rtree-adjust-bug.xml", std::ofstream::out);
+        ofs << to_xml();
+        ofs.close();
+
+        cout << " adjust bug, new node " << endl << node_to_string(nn);
+        ASSERT(valid);
+      }
+
       Eid ne = make_entry_id();
+
       Entry &new_entry = get_entry(ne);
       // cout << ".. inserting nn, made entry " << ne << " child nn " << nn <<
       // endl;
+      // cout << "  new node height " << new_node.height << " parent_node height " << parent_node.height << endl;
       new_entry.child_id = nn;
       update_entry_rect(ne);
 
       nn = insert(parent.node, ne);
+      // cout << ".. nn " << nn << endl;
     }
   }
-  if (n == m_root_id && nn) {
+  ASSERT(n == m_root_id);
+  if (nn) {
     // Root split!
-    // cout << "    root split " << n << nn << endl;
+
     // Important: make_node_id before getting nodes! Otherwise,
     // references might be invalid.
     Nid new_root_id = make_node_id();
-    Node &root = get_node(n);
+    Node &new_root = get_node(new_root_id);
+    
+    Node &existing_root = get_node(m_root_id);
     Node &new_node = get_node(nn);
-    ASSERT(root.height == new_node.height);
+
+    new_root.height = existing_root.height + 1;
+    // cout << "    root split " << n << nn << "new root " << new_root_id << endl;
+    // cout << "    new root height " << new_root.height << " old root height " << existing_root.height << endl;
+    ASSERT(existing_root.height == new_node.height);
 
     Eid old_root_e = make_entry_id();
+    Eid new_node_e = make_entry_id();
+    
     Entry &old_root_entry = get_entry(old_root_e);
     old_root_entry.child_id = m_root_id;
     update_entry_rect(old_root_e);
 
-    Eid new_node_e = make_entry_id();
     Entry &new_node_entry = get_entry(new_node_e);
     new_node_entry.child_id = nn;
     update_entry_rect(new_node_e);
 
-    Node &new_root = get_node(new_root_id);
-    new_root.height = root.height + 1;
+
     plain_insert(new_root_id, old_root_e);
     plain_insert(new_root_id, new_node_e);
 
@@ -832,7 +852,12 @@ PRE int QUAL::remove(const Vec &low, const Vec &high) {
 
   // cout << "remove traverals " << endl << pp(remove_traverals) << endl <<
   // endl;
-  condense(remove_traverals);
+  // sorting remove_traverals: ?? WIP
+  std::sort(remove_traverals.begin(), remove_traverals.end(),
+            [](const Traversal& a, const Traversal& b) {
+              return a.size() > b.size();
+            });
+  // condense(remove_traverals);
   m_size -= removed;
   return removed;
 }
@@ -902,13 +927,16 @@ PRE void QUAL::remove_node_entry(Nid n, int idx) {
 }
 
 PRE void QUAL::condense(const Traversals& traversals) {
-  // cout << ">>> condense tree" << endl;
+  cout << ">>> condense tree" << endl;
   std::set<Eid> entries_to_reinsert;
   for (const Traversal& traversal : traversals) {
-    // cout << "    " << pp(traversal) << endl;
+    cout << "    " << pp(traversal) << endl;
     // updating last traversal entry, since the other ones are updated when updating the parent p
     const Parent& last = traversal.back();
     update_entry_rect(last.entry);
+
+    // continue;
+    
     for(int i = traversal.size()-1; i >= 1; --i) {
       const Parent& x = traversal[i];
       Node& node = get_node(x.node);
@@ -940,16 +968,18 @@ PRE void QUAL::condense(const Traversals& traversals) {
     const Entry &entry = get_entry(*current);
     const Nid n = entry.child_id;
     if (n && get_node(n).count == 0) {
-      // cout << "removed from reinsert list: " << *current << endl;
+      // hmm not sure about this
+      cout << "remove from reinsert list?: " << *current << endl;
       entries_to_reinsert.erase(current);
     }
   }
 
-  // cout << "    reinsert " << pp(entries_to_reinsert) << endl;
+  cout << "    reinsert entries " << pp(entries_to_reinsert) << endl;
   for(Eid e : entries_to_reinsert) {
+    cout << "    reinserting " << e << endl;
     reinsert(e);
   }
-  // cout << "<<< condense tree" << endl;
+  cout << "<<< condense tree" << endl;
 }
 
 PRE int QUAL::count(Nid n) {
