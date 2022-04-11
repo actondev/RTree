@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <easyprint.hpp>
 
 #include <algorithm>
 #include <functional>
@@ -21,6 +22,8 @@
 #ifndef Max
 #define Max std::max
 #endif // Max
+
+#define pp(x) easyprint::stringify(x)
 
 //
 // RTree.h
@@ -71,7 +74,8 @@ class RTree {
 
 protected:
   uint32_t dims; // set by the constructor
-  struct Node;   // Fwd decl.  Used by other internal structs and iterator
+  struct Node;   // Fwd decl.  Used by other internal structs and Iterator
+  struct Xml;
   uint32_t count = 0;
 public:
   // These constant must be declared after Branch and before Node struct
@@ -132,6 +136,9 @@ public:
   /// Save tree contents to stream
   bool Save(RTFileStream &a_stream);
 
+  void to_string(int spaces, std::ostream &);
+  Xml to_xml() { return Xml(this); }
+
 protected:
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect {
@@ -139,6 +146,18 @@ protected:
     // constructor)
     ELEMTYPE m_min[MAXDIMS]{0}; ///< Min dimensions of bounding box
     ELEMTYPE m_max[MAXDIMS]{0}; ///< Max dimensions of bounding box
+  };
+  struct Xml {
+    RTree *tree;
+    int spaces = 4;
+    Xml() = delete;
+    Xml(RTree *tree) : tree{tree} {}
+    friend std::ostream &operator<<(std::ostream &os, const Xml &o) {
+      os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
+         << endl;
+      o.tree->to_string(o.spaces, os);
+      return os;
+    }
   };
 
   /// May be data or may be another subtree
@@ -226,6 +245,10 @@ protected:
   Node *m_root;                    ///< Root of tree
   ELEMTYPEREAL m_unitSphereVolume; ///< Unit sphere constant for required number
                                    ///< of dimensions
+
+  void rect_to_string(Rect*, std::ostream &os);
+  void node_to_string(Node*, int level, int spaces, std::ostream &os);
+  void branch_to_string(Branch*, int level, int spaces, std::ostream &os);
 
 public:
   // return all the AABBs that form the RTree
@@ -1175,5 +1198,90 @@ void RTREE_QUAL::CopyRec(Node *current, Node *other) {
   }
 }
 
+RTREE_TEMPLATE
+void RTREE_QUAL::to_string(int spaces, std::ostream &os) {
+  node_to_string(m_root, 0, spaces, os);
+}
+
+RTREE_TEMPLATE
+void RTREE_QUAL::branch_to_string(Branch* b, int level, int spaces, std::ostream &os) {
+  if (!b)
+    return;
+  auto indent = [&]() {
+    for (int i = 0; i < level * spaces; ++i) {
+      os << " ";
+    }
+  };
+  indent();
+  os << " <Branch mbr=\"";
+  rect_to_string(&b->m_rect, os);
+  os << "\"";
+  if (!b->m_child) {
+    // self closing entry, adding data-id
+    os << " data=\"" << pp(b->m_data) << "\"";
+    os << " />" << endl;
+  } else if (b->m_child) {
+    // child node
+    os << " >" << endl;
+    node_to_string(b->m_child, level + 1, spaces, os);
+    indent();
+    os << " </Branch>" << endl;
+  } else {
+    // should not reach this
+    os << " />" << endl;
+  }
+}
+
+RTREE_TEMPLATE
+void RTREE_QUAL::node_to_string(Node *n, int level, int spaces, std::ostream &os) {
+  if (!n)
+    return;
+  auto indent = [&]() {
+    for (int i = 0; i < level * spaces; ++i) {
+      os << " ";
+    }
+  };
+  indent();
+  os << "<Node height=\"" << n->m_level
+     << "\" children=\"" << n->m_count << "\" >" << endl;
+  for (int i = 0; i < n->m_count; i++) {
+    Branch* b = &n->m_branch[i];
+    branch_to_string(b, level, spaces, os);
+  }
+  indent();
+  os << "</Node>" << endl;
+}
+
+RTREE_TEMPLATE
+void RTREE_QUAL::rect_to_string(Rect *r, std::ostream &os) {
+  ASSERT(r);
+  for (int i = 0; i < dims; i++) {
+    if (i == 0) {
+      os << "{";
+    }
+    os << r->m_min[i];
+    if (i != dims - 1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+
+  os << "...";
+
+  for (int i = 0; i < dims; i++) {
+    if (i == 0) {
+      os << "{";
+    }
+    os << r->m_max[i];
+    if (i != dims - 1) {
+      os << ", ";
+    } else {
+      os << "}";
+    }
+  }
+}
+
 #undef RTREE_TEMPLATE
 #undef RTREE_QUAL
+#undef pp
