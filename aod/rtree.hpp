@@ -8,6 +8,7 @@
 #include <ostream>
 #include <set>
 #include <vector>
+#include <easyprint.hpp>
 #define ASSERT assert
 #define pp(x) easyprint::stringify(x)
 namespace aod {
@@ -217,6 +218,7 @@ private:
     return m_rects_high[r.id * m_dims + dim];
   }
   std::string rect_to_string(Rid);
+  void rect_to_string(Rid, std::ostream &os);
   std::string traversal_to_string(const Traversal &traversal);
   std::string node_to_string(Nid nid, int level = 0, int spaces = 4);
   void node_to_string(Nid nid, int level, int spaces, std::ostream &);
@@ -1109,11 +1111,14 @@ PRE void QUAL::entry_to_string(Eid e, int level, int spaces, std::ostream &os) {
   Entry entry = get_entry(e);
   Rid r = entry.rect_id;
   indent();
-  os << " <Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\" bounds=\""
-     << rect_to_string(r) << "\"";
+  os << " <Entry id=\"" << e.id << "\"";
+  // os << " rect_id=\"" << r.id << "\"";
+  os << " mbr=\"";
+  rect_to_string(r, os);
+  os << "\"";
   if (entry.data_id) {
     // self closing entry, adding data-id
-    os << " data-id=\"" << entry.data_id.id << "\"";
+    // os << " data-id=\"" << entry.data_id.id << "\"";
     os << " data=\"" << pp(get_data(entry.data_id)) << "\"";
     os << " />" << endl;
   } else if (entry.child_id) {
@@ -1149,25 +1154,6 @@ PRE void QUAL::node_to_string(Nid n, int level, int spaces, std::ostream &os) {
   for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(n, i);
     entry_to_string(e, level, spaces, os);
-    // Entry entry = get_entry(e);
-    // Rid r = entry.rect_id;
-    // indent();
-    // os << " <Entry id=\"" << e.id << "\" rect_id=\"" << r.id << "\"
-    // bounds=\""
-    //    << rect_to_string(r) << "\"";
-    // if (node.height == 0) {
-    //   Did did = entry.data_id;
-    //   // self closing entry, adding data-id
-    //   os << " data-id=\"" << did.id << "\"";
-    //   os << " data=\"" << pp(get_data(did)) << "\"";
-    //   os << " />" << endl;
-    // } else {
-    //   // child node
-    //   os << " >" << endl;
-    //   node_to_string(entry.child_id, level + 1, spaces, os);
-    //   indent();
-    //   os << " </Entry>" << endl;
-    // }
   }
   indent();
   os << "</Node>" << endl;
@@ -1189,9 +1175,7 @@ PRE void QUAL::to_string(int spaces, std::ostream &os) {
   node_to_string(m_root_id, 0, spaces, os);
 }
 
-PRE std::string QUAL::rect_to_string(Rid rid) {
-  std::ostringstream os;
-
+PRE void QUAL::rect_to_string(Rid rid, std::ostream &os) {
   ASSERT(rid);
   for (int i = 0; i < m_dims; i++) {
     if (i == 0) {
@@ -1219,8 +1203,14 @@ PRE std::string QUAL::rect_to_string(Rid rid) {
     }
   }
 
+}
+
+PRE std::string QUAL::rect_to_string(Rid rid) {
+  std::ostringstream os;
+  rect_to_string(rid, os);
   return os.str();
 }
+
 PRE std::string QUAL::traversal_to_string(const Traversal &traversal) {
   std::ostringstream os;
   os << "Traversal{" << pp(traversal) << "}";

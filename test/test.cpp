@@ -488,6 +488,25 @@ TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
   WARN("removing fat cross took " << duration_ms(t2 - t1) << " ms ");
 }
 
+TEST_CASE("aod vs superliminal", "[aod:rtree]") {
+  int size = 2;
+  auto grid = make_grid(size, 2); // TODO crashes with 3 (works with 2)
+  RTree<Point, double, 2> tree = grid_to_rtree_template<2>(grid);
+  aod::rtree<Point> aod_tree = grid_to_aod_rtree(grid);
+
+  {
+    std::ofstream ofs("aod-rtree.xml", std::ofstream::out);
+    ofs << aod_tree.to_xml();
+    ofs.close();
+  }
+  {
+    std::ofstream ofs("superliminal_rtree.xml", std::ofstream::out);
+    ofs << tree.to_xml();
+    ofs.close();
+  }
+}
+
+
 TEST_CASE("drtree3 test: 5x5", "[drtree3][basic test]") {
   const int size = 5;
   auto grid = make_grid(size);

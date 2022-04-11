@@ -28,13 +28,14 @@ run_tests = executable(
 test('tests',
      run_tests,
      workdir: meson.project_source_root(),
+     args: ['aod vs superliminal'],
      # args: ['[aod::rtree]']
      # args: ['[aod::rtree][fixme]']
      # args: ['drtree3 test: 5x5']
      # args: ['drtree3 test: 7x7']
      # args: ['drtree3 test: 10x10']
      # args: ['[basic test]']
-     args: ['[benchmark]']
+     # args: ['[benchmark]']
      # args: ['[benchmark][aod::rtree]']
      # args: ['[drtree3]']
      # args: ['[drtree2]']
