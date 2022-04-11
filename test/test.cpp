@@ -427,12 +427,19 @@ TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
 }
 
 TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
-  auto grid = make_grid(benchmark_size, 2); // TODO crashes with 3 (works with 2)
+  int size = benchmark_size;
+  auto grid = make_grid(size, 2); // TODO crashes with 3 (works with 2)
   auto t1 = high_resolution_clock::now();
   aod::rtree<Point> tree = grid_to_aod_rtree(grid);
   auto t2 = high_resolution_clock::now();
-  WARN("init size " << benchmark_size << " took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.size() == benchmark_size*benchmark_size);
+  WARN("init size " << size << " took " << duration_ms(t2 - t1) << "ms");
+  REQUIRE(tree.size() == size*size);
+
+  if (false) {
+    std::ofstream ofs("aod-rtree-200x200-init.xml", std::ofstream::out);
+    ofs << tree.to_xml();
+    ofs.close();
+  }
 
   std::vector<Point> expected = {
     { 5.0, 2.0 },
@@ -462,6 +469,23 @@ TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
   REQUIRE(tree2.size() == tree.size());
   auto found2 = tree2.search(low, high);
   REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
+
+  // removing fat cross
+  t1 = now();
+  // removing a fat cross in the center, leaving corners with side=2
+  int retain_side = 2;
+  int expected_removed1 = size * (size-2*retain_side);
+  int removed1 = tree.remove({0,retain_side},{size-1,size-1-retain_side});
+  REQUIRE(removed1 == expected_removed1);
+  int expected_removed2 = 2 * (size-2*retain_side)*retain_side;
+  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1});
+  REQUIRE(removed2 == expected_removed2);
+  REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
+  REQUIRE(tree.size() == 16);
+  found = tree.search({0, 0}, {size, size});
+  REQUIRE(found.size() == 16);
+  t2 = now();
+  WARN("removing fat cross took " << duration_ms(t2 - t1) << " ms ");
 }
 
 TEST_CASE("drtree3 test: 5x5", "[drtree3][basic test]") {
@@ -768,8 +792,8 @@ TEST_CASE("aod::rtree 10x10", "[aod::rtree]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
-  const int size = 13;
+TEST_CASE("aod::rtree temp", "[aod::rtree][.skip]") {
+  const int size = 200;
   auto grid = make_grid(size);
   shuffle_deterministic(grid);
   
@@ -827,7 +851,6 @@ TEST_CASE("aod::rtree temp", "[aod::rtree][fixme]") {
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
 
-
 TEST_CASE("drtree3 test: 100x100", "[drtree3][basic test][.skip-fix]") {
   const int size = 100;
   auto grid = make_grid(size);
@@ -860,7 +883,6 @@ TEST_CASE("drtree3 test: 100x100", "[drtree3][basic test][.skip-fix]") {
   
   REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
 }
-
 
 TEST_CASE("rtree test", "[rtree][basic test]") {
   const int size = 10; // todo with size 9, searching {6,2} to {6,4}, {6,3} not returned
@@ -911,8 +933,6 @@ TEST_CASE("rtree test", "[rtree][basic test]") {
   expected = {};
   REQUIRE_THAT(results, Catch::Matchers::UnorderedEquals(expected));
 }
-
-
 
 TEST_CASE("allocations", "[.temp]") {
   auto grid = make_grid(2, 2);

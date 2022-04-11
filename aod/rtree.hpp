@@ -450,12 +450,34 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
 }
 
 PRE void QUAL::reinsert_entry(Eid e) {
+  const bool dbg = e.id == 46;
+  if(dbg) {
+    cout << " dbg reinsert " << endl << entry_to_string(e) << endl;
+    cout << to_xml() << endl;
+  }
+  const Entry &entry = get_entry(e);
+  if(entry.child_id) {
+    const Node& entry_node = get_node(entry.child_id);
+    const Node &root = get_node(m_root_id);
+    const bool should_split_reinsert = root.height <= entry_node.height;
+
+    if (should_split_reinsert) {
+      cout << " reinserting node: reinserting children! " << e
+           << " root height " << root.height << " entry node height "
+           << entry_node.height << endl;
+      int children_count = get_node(entry.child_id).count;
+      for (int i = 0; i < children_count; ++i) {
+        reinsert_entry(get_node_entry(entry.child_id, i));
+      }
+      return;
+    }
+  }
+
   m_traversal.clear();
   // TODO traversal needs also root, I'm manually doing it atm
   Parent p_root;
   p_root.node = m_root_id;
   m_traversal.push_back(p_root);
-  const Entry &entry = get_entry(e);
   int height = entry.child_id ? get_node(entry.child_id).height + 1 : 0;
   Nid n = choose_node(m_root_id, entry.rect_id, height, m_traversal);
   Nid nn = insert(n, e);
@@ -464,7 +486,6 @@ PRE void QUAL::reinsert_entry(Eid e) {
   // p.node = n;
   // m_traversal.push_back(p);
 
-  const bool dbg = false; // e.id == 159;
   if (dbg) {
     cout << "reinserted " << e << " into n " << n << " nn " << nn << endl;
     cout << "  " << pp(m_traversal) << endl;
@@ -640,7 +661,8 @@ PRE void QUAL::adjust_rects(const Traversal &traversal) {
 PRE void QUAL::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
   bool dbg = false; // e.id == 159;
   if (dbg) {
-    cout << ">>> adjust tree " << pp(traversal) << " " << e << " nn " << nn << endl;
+    cout << ">>> adjust tree " << pp(traversal) << " " << e << " nn " << nn
+         << endl;
   }
   Nid n;
   for (int level = traversal.size() - 1; level >= 0; --level) {
@@ -940,10 +962,10 @@ PRE void QUAL::remove_node_entry(Nid n, int idx) {
 }
 
 PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
-  cout << ">>> condense tree" << endl;
+  // cout << ">>> condense tree" << endl;
   std::set<Eid> entries_to_reinsert;
   for (const Traversal &traversal : traversals) {
-    cout << "    " << pp(traversal) << endl;
+    // cout << "    " << pp(traversal) << endl;
     // updating last traversal entry, since the other ones are updated when
     // updating the parent p
     const Parent &last = traversal.back();
@@ -995,7 +1017,7 @@ PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
     }
   }
 
-  cout << "    reinsert entries " << pp(entries_to_reinsert) << endl;
+  // cout << "    reinsert entries " << pp(entries_to_reinsert) << endl;
   for (Eid e : entries_to_reinsert) {
     const bool dbg = e.id == 159;
     if (dbg) {
@@ -1003,10 +1025,10 @@ PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
       ofs << to_xml();
       ofs.close();
     }
-    cout << "    reinserting " << e << endl; // << entry_to_string(e) << endl;
+    // cout << "    reinserting " << e << endl; // << entry_to_string(e) << endl;
     reinsert_entry(e);
   }
-  cout << "<<< condense tree" << endl;
+  // cout << "<<< condense tree" << endl;
 }
 
 PRE int QUAL::count(Nid n) {
