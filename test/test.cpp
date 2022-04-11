@@ -291,54 +291,6 @@ TEST_CASE("10x4d rtree", "[.skip]") {
 const int benchmark_size = 200;
 const int searches = 10000;
 const char* search_str = "search x10000 ";
-// total heap usage: 119,490 allocs, 119,490 frees, 10,676,298 bytes allocated
-// RECT_ONE_ARRAY: total heap usage: 119,490 allocs, 119,490 frees, 10,073,986 bytes allocated
-TEST_CASE("200x2d drtree", "[benchmark][drtree]") {
-  auto grid = make_grid(benchmark_size, 2); // 100x100=>10k points
-  // cout << pp(grid.points) << endl;
-
-  auto t1 = now();
-  drtree<Point> tree = grid_to_rtree(grid);
-  auto t2 = now();
-  WARN("init took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.Count() == benchmark_size*benchmark_size);
-
-  // return;
-  double low[2] = {5, 2};
-  double high[2] = {6, 4};
-  std::vector<Point> found;
-  Callback cb = [&](Point node, const double *low, const double *high) {
-    found.push_back(node);
-    return true;
-  };
-  t1 = now();
-  for (int i = 0; i < searches; i++) {
-    found.clear();
-    tree.Search(low, high, cb);
-  }
-  t2 = now();
-  WARN(search_str << duration_ms(t2 - t1) << " ms ");
-  REQUIRE(found.size() == 6);
-  std::vector<Point> expected = {
-    { 5.0, 2.0 },
-    { 5.0, 3.0 },
-    { 5.0, 4.0 },
-    { 6.0, 2.0 },
-    { 6.0, 3.0 },
-    { 6.0, 4.0 },
-  };
-  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
-
-  t1 = now();
-  drtree<Point> tree2 = tree;
-  t2 = now();
-  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
-  REQUIRE(tree2.Count() == tree.Count());
-
-  found.clear();
-  tree2.Search(low, high, cb);
-  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
-}
 
 // total heap usage: 218,693 allocs, 218,693 frees, 9,627,530 bytes allocated
 // 4 MAXDIMS: total heap usage: 218,693 allocs, 218,693 frees, 12,036,490 bytes allocated
@@ -388,44 +340,6 @@ TEST_CASE("200x2d rtree", "[benchmark][rtree]") {
   #undef MAXDIMS
 }
 
-TEST_CASE("200x2d drtree3", "[drtree3][benchmark]") {
-  auto grid = make_grid(benchmark_size); // TODO crashes with 3 (works with 2)
-  auto t1 = high_resolution_clock::now();
-  drtree3<Point> tree = grid_to_drtree3(grid);
-  auto t2 = high_resolution_clock::now();
-  WARN("init size " << benchmark_size << " took " << duration_ms(t2 - t1) << "ms");
-  REQUIRE(tree.size() == benchmark_size*benchmark_size);
-
-  std::vector<Point> expected = {
-    { 5.0, 2.0 },
-    { 5.0, 3.0 },
-    { 5.0, 4.0 },
-    { 6.0, 2.0 },
-    { 6.0, 3.0 },
-    { 6.0, 4.0 },
-  };
-  std::vector<double> low = {5 , 2};
-  std::vector<double> high = {6 , 4};
-  auto found = tree.search(low, high);
-  REQUIRE_THAT(found, Catch::Matchers::UnorderedEquals(expected));
-
-  t1 = now();
-  for (int i = 0; i < searches; i++) {
-    tree.search(low, high, found);
-  }
-  t2 = now();
-  WARN(search_str << duration_ms(t2 - t1) << " ms ");
-
-  t1 = now();
-  drtree3<Point>tree2 = tree;
-  t2 = now();
-  WARN("copy took " << duration_ms(t2 - t1) << " ms ");
-
-  REQUIRE(tree2.size() == tree.size());
-  auto found2 = tree2.search(low, high);
-  REQUIRE_THAT(found2, Catch::Matchers::UnorderedEquals(expected));
-}
-
 TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
   int size = benchmark_size;
   auto grid = make_grid(size, 2); // TODO crashes with 3 (works with 2)
@@ -436,7 +350,7 @@ TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
   REQUIRE(tree.size() == size*size);
 
   if (false) {
-    std::ofstream ofs("aod-rtree-200x200-init.xml", std::ofstream::out);
+    std::ofstream ofs("aod-rtree-benchmark-init.xml", std::ofstream::out);
     ofs << tree.to_xml();
     ofs.close();
   }
@@ -472,7 +386,7 @@ TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
 
   // removing fat cross
   t1 = now();
-  // removing a fat cross in the center, leaving corners with side=2
+  // removing a fat cross in the center, leaving squares [side x side]
   int retain_side = 2;
   int expected_removed1 = size * (size-2*retain_side);
   int removed1 = tree.remove({0,retain_side},{size-1,size-1-retain_side});
@@ -481,15 +395,20 @@ TEST_CASE("200x2d aod::rtree", "[aod::rtree][benchmark]") {
   int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1});
   REQUIRE(removed2 == expected_removed2);
   REQUIRE(tree.size() == size*size - removed1 - removed2); // 4 left in each corner (2x2)
-  REQUIRE(tree.size() == 16);
+  REQUIRE(tree.size() == (4*retain_side*retain_side));
   found = tree.search({0, 0}, {size, size});
-  REQUIRE(found.size() == 16);
+  REQUIRE(found.size() == (4*retain_side*retain_side));
   t2 = now();
   WARN("removing fat cross took " << duration_ms(t2 - t1) << " ms ");
+  {
+  std::ofstream ofs("aod-rtree-benchmark-removed-fat-cross.xml", std::ofstream::out);
+  ofs << tree.to_xml();
+  ofs.close();
+  }
 }
 
 TEST_CASE("aod vs superliminal", "[aod:rtree]") {
-  int size = 2;
+  int size = 200;
   auto grid = make_grid(size, 2); // TODO crashes with 3 (works with 2)
   RTree<Point, double, 2> tree = grid_to_rtree_template<2>(grid);
   aod::rtree<Point> aod_tree = grid_to_aod_rtree(grid);
@@ -789,7 +708,7 @@ TEST_CASE("aod::rtree 10x10", "[aod::rtree]") {
 
   // return;
 
-  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}, true); // vertical
+  int removed2 = tree.remove({retain_side, 0}, {size-1-retain_side, size-1}); // vertical
   ofs = std::ofstream("aod-rtree-10x10-removed-2.xml", std::ofstream::out);
   ofs << tree.to_xml();
   ofs.close();

@@ -927,3 +927,44 @@ Delete(r, o):
   https://tildesites.bowdoin.edu/~ltoma/teaching/cs340/spring08/Papers/Rstar3.pdf
 * TODO compare tree with Superliminal
   add to_xml functionality, and compare!
+
+  could not get to get 1-1 serialization, gave up.
+  Using simple rect volume (not spherical volume) in superliminal version, was getting similar tree on 3x3 grid (9 entries). but then was getting differences.
+  In general getting same tree height (height 6 vs 200x200)
+** O2 , non randomized grid 200x200
+   #+begin_quote
+ -------------------------------------------------------------------------------
+ 200x2d rtree
+ -------------------------------------------------------------------------------
+ ../test/test.cpp:345
+ ...............................................................................
+
+ ../test/test.cpp:354: 
+ warning:
+   init size 200 took 42ms
+
+ ../test/test.cpp:370: 
+ warning:
+   search x10000 31 ms 
+
+ ../test/test.cpp:385: warning:
+   copy took 7 ms 
+
+ -------------------------------------------------------------------------------
+ 200x2d aod::rtree
+ -------------------------------------------------------------------------------
+ ../test/test.cpp:429
+ ...............................................................................
+
+ ../test/test.cpp:435: warning:
+   init size 200 took 51ms
+
+ ../test/test.cpp:462: warning:
+   search x10000 13 ms 
+
+ ../test/test.cpp:467: warning:
+   copy took 3 ms 
+   #+end_quote
+
+  
+   with simple rect volume. using spherical volume superliminal init is slightly slower!

@@ -39,17 +39,11 @@ struct Rid : Id {};
 /// Node Id
 struct Nid : Id {};
 
-/// Entry Id. Each nodes has `m <= count <= M` children
+/// Entry Id. Each node has `m <= count <= M` children
 struct Eid : Id {};
 
 /// Data id
 struct Did : Id {};
-
-struct Branch {
-  Rid rect_id;
-  Nid child_id;
-  Did data_id;
-};
 
 struct Entry {
   Rid rect_id;
@@ -98,7 +92,7 @@ std::ostream &operator<<(std::ostream &os, const Parent &p) {
 
 template <class DATATYPE, class ELEMTYPE = double> class rtree {
   static_assert(std::numeric_limits<ELEMTYPE>::is_iec559,
-                "'COORD_TYPE' accepts floating-point types only");
+                "'ELEMTYPE' accepts floating-point types only");
 
   typedef std::vector<ELEMTYPE> Vec;
 
@@ -240,7 +234,7 @@ public:
   size_t size();
   std::vector<DATATYPE> search(const Vec &low, const Vec &high);
   void search(const Vec &low, const Vec &high, std::vector<DATATYPE> &results);
-  int remove(const Vec &low, const Vec &high, bool condense = true);
+  int remove(const Vec &low, const Vec &high);
   std::string to_string();
   void to_string(int spaces, std::ostream &);
   Xml to_xml() { return Xml(this); }
@@ -259,7 +253,8 @@ private:
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
                           const std::array<int, 2> &seeds);
   void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
-  bool search(Nid, Rid, int &found_count, SearchCb);
+
+  bool search(Nid, Rid, int &found_count, const SearchCb&);
   bool rect_contains(Rid bigger, Rid smaller);
   inline bool rects_overlap(Rid, Rid);
 
@@ -288,12 +283,10 @@ private:
 
   /// Called after removal of Node(s), by passing the traversal(s) of
   /// the tree that took place for the removed entries
-  void condense_tree(const Traversals &, bool do_reinsert = true);
+  void condense_tree(const Traversals &);
 
   int count(Nid n);
   void count(Nid n, int &); // recursive
-
-  // TODO signatures
 
   void combine_rects(Rid a, Rid b, Rid dst);
   void update_entry_rect(Eid e);
@@ -414,20 +407,13 @@ PRE void QUAL::update_entry_rect(Eid e) {
 }
 
 PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
-  // std::ofstream ofs("aod-rtree-duplicates-before.xml", std::ofstream::out);
-  // ofs << to_xml();
-  // ofs.close();
-
-  ++m_size;                // for debug, I read it in insert/split functions
-  Eid e = make_entry_id(); // also sets the rect
+  ++m_size;
+  const Eid e = make_entry_id(); // also sets the rect
   Entry &entry = get_entry(e);
   entry.data_id = make_data_id();
   set_data(entry.data_id, data);
-  Rid r = entry.rect_id;
 
-  // cout << endl;
-  // cout << "+++ insert " << e << " " << entry.data_id << " " << pp(data) <<
-  // endl;
+  const Rid r = entry.rect_id;
 
   for (int i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
@@ -435,28 +421,13 @@ PRE void QUAL::insert(const Vec &low, const Vec &high, const DATATYPE &data) {
   }
 
   m_traversal.clear();
-  Nid n = choose_leaf(entry.rect_id, m_traversal);
-  Nid nn = insert(n, e);
+  const Nid n = choose_leaf(entry.rect_id, m_traversal);
+  const Nid nn = insert(n, e);
 
   adjust_tree(m_traversal, e, nn);
-
-  // TODO debug flag for duplicate nodes check
-  // bool has_duplicates = has_duplicate_nodes();
-  // if(has_duplicates) {
-  //   std::ostringstream os;
-  //   std::ofstream ofs("aod-rtree-duplicates.xml", std::ofstream::out);
-  //   ofs << to_xml();
-  //   ofs.close();
-  // }
-  // ASSERT(has_duplicates == false);
 }
 
 PRE void QUAL::reinsert_entry(Eid e) {
-  const bool dbg = e.id == 46;
-  if(dbg) {
-    cout << " dbg reinsert " << endl << entry_to_string(e) << endl;
-    cout << to_xml() << endl;
-  }
   const Entry &entry = get_entry(e);
   if(entry.child_id) {
     const Node& entry_node = get_node(entry.child_id);
@@ -464,10 +435,7 @@ PRE void QUAL::reinsert_entry(Eid e) {
     const bool should_split_reinsert = root.height <= entry_node.height;
 
     if (should_split_reinsert) {
-      cout << " reinserting node: reinserting children! " << e
-           << " root height " << root.height << " entry node height "
-           << entry_node.height << endl;
-      int children_count = get_node(entry.child_id).count;
+      const int children_count = get_node(entry.child_id).count;
       for (int i = 0; i < children_count; ++i) {
         reinsert_entry(get_node_entry(entry.child_id, i));
       }
@@ -480,20 +448,10 @@ PRE void QUAL::reinsert_entry(Eid e) {
   Parent p_root;
   p_root.node = m_root_id;
   m_traversal.push_back(p_root);
-  int height = entry.child_id ? get_node(entry.child_id).height + 1 : 0;
-  Nid n = choose_node(m_root_id, entry.rect_id, height, m_traversal);
-  Nid nn = insert(n, e);
-  // Parent p;
-  // p.entry = e;
-  // p.node = n;
-  // m_traversal.push_back(p);
+  const int height = entry.child_id ? get_node(entry.child_id).height + 1 : 0;
+  const Nid n = choose_node(m_root_id, entry.rect_id, height, m_traversal);
+  const Nid nn = insert(n, e);
 
-  if (dbg) {
-    cout << "reinserted " << e << " into n " << n << " nn " << nn << endl;
-    cout << "  " << pp(m_traversal) << endl;
-    cout << node_to_string(n) << endl;
-    cout << node_to_string(nn) << endl;
-  }
   adjust_tree(m_traversal, e, nn);
 }
 
@@ -501,16 +459,13 @@ PRE Nid QUAL::insert(Nid n, Eid e) {
   Nid nn; // new node (falsy)
   Node &node = get_node(n);
   if (node.count < M) {
-    // cout << "    plain_insert" << endl;
     plain_insert(n, e);
   } else {
     nn = split_and_insert(n, e);
     ASSERT(nn);
-    // cout << "    split_and_insert " << endl;
   }
-  // NB: nn (new node - afte split_and_insert) isn't yet a part of the tree!
-
-  // cout << "<<< internal_insert, nn " << nn << endl;
+  // NB: nn (new node - after split_and_insert) isn't yet a part of
+  // the tree!
   return nn;
 }
 
@@ -542,8 +497,8 @@ PRE Nid QUAL::split_and_insert(Nid n, Eid e) {
   node.count = 0; // TODO free up entries (entry ids) to be reused
   new_node.count = 0;
 
-  // debugging: just placing first hald entries to n, next ones to nn
   distribute_entries(n, nn, entries, seeds);
+  // debugging: just placing first half entries to n, rest to nn
   // distribute_entries_naive(n, nn, entries);
 
   // cout << " split and insert " << n << nn << endl;
@@ -570,32 +525,32 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   m_partition.groups_areas[0] = rect_volume(m_partition.groups_rects[0]);
   m_partition.groups_areas[1] = rect_volume(m_partition.groups_rects[1]);
 
-  // removing the seeds from the entries. First removing the 2nd seed, as it
+  // quick remove seeds from the entries. First removing the 2nd seed, as it
   // will be bigger, cause it might be the last one
   entries[seeds[1]] = entries.back();
   entries.pop_back();
   entries[seeds[0]] = entries.back();
   entries.pop_back();
 
-  ASSERT(entries.size() == M - 1); // M+1 -2
+  ASSERT(entries.size() == M - 1); // (M+1) -2
 
   ELEMTYPE biggestDiff;
   int group, entry_index = 0, betterGroup = 0;
   // existing node: group[0], new node: group[1]
-  Nid groups[2] = {n, nn};
+  const Nid groups[2] = {n, nn};
   const Node *nodes[2] = {&node, &new_node};
-  int max_fill = M + 1 - m;
+  const int max_fill = M + 1 - m;
   while (!entries.empty() && node.count < max_fill &&
          new_node.count < max_fill) {
     biggestDiff = (ELEMTYPE)-1;
     for (int i = 0; i < entries.size(); ++i) {
       const Entry &entry = get_entry(entries[i]);
-      Rid r = entry.rect_id;
+      const Rid r = entry.rect_id;
       combine_rects(r, m_partition.groups_rects[0], m_partition.temp_rects[0]);
       combine_rects(r, m_partition.groups_rects[1], m_partition.temp_rects[1]);
-      ELEMTYPE growth0 =
+      const ELEMTYPE growth0 =
           rect_volume(m_partition.temp_rects[0]) - m_partition.groups_areas[0];
-      ELEMTYPE growth1 =
+      const ELEMTYPE growth1 =
           rect_volume(m_partition.temp_rects[1]) - m_partition.groups_areas[1];
       ELEMTYPE diff = growth1 - growth0;
       if (diff > 0) {
@@ -614,7 +569,6 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
         betterGroup = group;
       }
     }
-    // put chose into the betterGroup
     combine_rects(get_entry(entries[entry_index]).rect_id,
                   m_partition.groups_rects[betterGroup],
                   m_partition.groups_rects[betterGroup]);
@@ -622,7 +576,8 @@ PRE void QUAL::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
         rect_volume(m_partition.groups_rects[betterGroup]);
 
     plain_insert(groups[betterGroup], entries[entry_index]);
-    // entries.erase(entries.begin() + entry_index);
+
+    // quick remove:
     entries[entry_index] = entries.back();
     entries.pop_back();
   }
@@ -661,17 +616,17 @@ PRE void QUAL::adjust_rects(const Traversal &traversal) {
 }
 
 PRE void QUAL::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
-  bool dbg = false; // e.id == 159;
+  const bool dbg = false; // e.id == 159;
   if (dbg) {
-    cout << ">>> adjust tree " << pp(traversal) << " " << e << " nn " << nn
-         << endl;
+    // cout << ">>> adjust tree " << pp(traversal) << " " << e << " nn " << nn
+         // << endl;
   }
   Nid n;
   for (int level = traversal.size() - 1; level >= 0; --level) {
     const Parent &parent = traversal[level];
     n = parent.node;
     const Node &parent_node = get_node(parent.node);
-    // a parent has : entry -> node info
+    // a parent is: entry -> node
     if (parent.entry) {
       // aka not root node. root node doesn't belong to an entry
       if (nn) {
@@ -694,23 +649,14 @@ PRE void QUAL::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
       const Node &new_node = get_node(nn);
       ASSERT(parent_node.height == new_node.height + 1);
 
-      // cout << " parent node nn etc " << i << " " << traversal.size() << endl;
-      // cout << ".. parent node " << parent.node << "H" << parent_node.height
-      //      << " nn " << nn << "H" << new_node.height << endl;
-      // ASSERT(parent_node.height == new_node.height + 1);
-
-      Eid ne = make_entry_id();
-
+      const Eid ne = make_entry_id();
       Entry &new_entry = get_entry(ne);
       // cout << ".. inserting nn, made entry " << ne << " child nn " << nn <<
       // endl;
-      // cout << "  new node height " << new_node.height << " parent_node
-      // height " << parent_node.height << endl;
       new_entry.child_id = nn;
       update_entry_rect(ne);
 
       nn = insert(parent.node, ne);
-      // cout << ".. ne " << ne << endl;
     }
   }
   ASSERT(n == m_root_id);
@@ -719,20 +665,17 @@ PRE void QUAL::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
 
     // Important: make_node_id before getting nodes! Otherwise,
     // references might be invalid.
-    Nid new_root_id = make_node_id();
-    Node &new_root = get_node(new_root_id);
+    const Nid new_root_id = make_node_id();
 
-    Node &existing_root = get_node(m_root_id);
-    Node &new_node = get_node(nn);
+    Node &new_root = get_node(new_root_id); // non const - setting height
+    const Node &existing_root = get_node(m_root_id);
+    const Node &new_node = get_node(nn);
 
     new_root.height = existing_root.height + 1;
-    // cout << "    root split " << n << nn << "new root " << new_root_id <<
-    // endl; cout << "    new root height " << new_root.height << " old root
-    // height " << existing_root.height << endl;
     ASSERT(existing_root.height == new_node.height);
 
-    Eid old_root_e = make_entry_id();
-    Eid new_node_e = make_entry_id();
+    const Eid old_root_e = make_entry_id();
+    const Eid new_node_e = make_entry_id();
 
     Entry &old_root_entry = get_entry(old_root_e);
     old_root_entry.child_id = m_root_id;
@@ -830,11 +773,11 @@ PRE void QUAL::search(const Vec &low, const Vec &high,
   search(m_root_id, m_temp_rect, found_count, cb);
 }
 
-PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
+PRE bool QUAL::search(Nid n, Rid r, int &found_count, const SearchCb &cb) {
   const Node &node = get_node(n);
   if (node.is_internal()) {
     for (int i = 0; i < node.count; ++i) {
-      Eid e = get_node_entry(n, i);
+      const Eid e = get_node_entry(n, i);
       const Entry &entry = get_entry(e);
       // hm, though I could use rect_contains, but I may be asking for a big
       // rect (search), not a specific rect I have inserted thus, the entry rect
@@ -851,7 +794,7 @@ PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
   } else {
     // leaf
     for (int i = 0; i < node.count; ++i) {
-      Eid e = get_node_entry(n, i);
+      const Eid e = get_node_entry(n, i);
       const Entry &entry = get_entry(e);
       // TODO define some algorithm for search: overlap vs contain, etc..
       if (rects_overlap(r, entry.rect_id)) {
@@ -867,7 +810,7 @@ PRE bool QUAL::search(Nid n, Rid r, int &found_count, SearchCb cb) {
   return true; // continue searching
 }
 
-PRE int QUAL::remove(const Vec &low, const Vec &high, bool condense) {
+PRE int QUAL::remove(const Vec &low, const Vec &high) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
   for (int i = 0; i < m_dims; ++i) {
@@ -883,18 +826,12 @@ PRE int QUAL::remove(const Vec &low, const Vec &high, bool condense) {
   cur_traversal.push_back(p);
   remove(m_root_id, m_temp_rect, removed, remove_traverals, cur_traversal, cb);
 
-  // cout << "remove traverals " << endl << pp(remove_traverals) << endl <<
-  // endl;
-  // sorting remove_traverals: ?? WIP
+  // sorting remove_traverals: longer traverals first, thus leaf node entries (data) removed first
   std::sort(remove_traverals.begin(), remove_traverals.end(),
             [](const Traversal &a, const Traversal &b) {
               return a.size() > b.size();
             });
-  if (condense) {
-    condense_tree(remove_traverals, condense);
-  } else {
-    cout << " skipping condense " << pp(remove_traverals) << endl;
-  }
+  condense_tree(remove_traverals);
   m_size -= removed;
   return removed;
 }
@@ -963,18 +900,11 @@ PRE void QUAL::remove_node_entry(Nid n, int idx) {
   --node.count;
 }
 
-PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
+PRE void QUAL::condense_tree(const Traversals &traversals) {
   // cout << ">>> condense tree" << endl;
   std::set<Eid> entries_to_reinsert;
   for (const Traversal &traversal : traversals) {
     // cout << "    " << pp(traversal) << endl;
-    // updating last traversal entry, since the other ones are updated when
-    // updating the parent p
-    const Parent &last = traversal.back();
-    update_entry_rect(last.entry);
-
-    // continue;
-
     for (int i = traversal.size() - 1; i >= 1; --i) {
       const Parent &x = traversal[i];
       Node &node = get_node(x.node);
@@ -997,14 +927,12 @@ PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
     adjust_rects(traversal);
   }
 
-  {
-    // if root has no children, make it a leaf node?
-    // what if a node with height 1 was removed & then will be reinserted?
-    Node &root = get_node(m_root_id);
-    if (root.count == 0) {
-      cout << "root empty!, setting height to 0 " << endl;
-      root.height = 0;
-    }
+  // if root has no children, make it a leaf node?
+  // what if a node with height 1 was removed & then will be reinserted?
+  Node &root = get_node(m_root_id);
+  if (root.count == 0) {
+    // cout << "root empty!, setting height to 0 " << endl;
+    root.height = 0;
   }
   // skipping reinserting entries that point to empty node
   std::set<Eid>::iterator it = entries_to_reinsert.begin();
@@ -1021,12 +949,6 @@ PRE void QUAL::condense_tree(const Traversals &traversals, bool do_reinsert) {
 
   // cout << "    reinsert entries " << pp(entries_to_reinsert) << endl;
   for (Eid e : entries_to_reinsert) {
-    const bool dbg = e.id == 159;
-    if (dbg) {
-      std::ofstream ofs("aod-rtree-reinsert-dbg.xml", std::ofstream::out);
-      ofs << to_xml();
-      ofs.close();
-    }
     // cout << "    reinserting " << e << endl; // << entry_to_string(e) << endl;
     reinsert_entry(e);
   }
@@ -1215,15 +1137,6 @@ PRE std::string QUAL::traversal_to_string(const Traversal &traversal) {
   std::ostringstream os;
   os << "Traversal{" << pp(traversal) << "}";
 
-  // os << "Traversal" << offset << "{";
-  // for (int i = 0; i < traversal.size() - offset; ++i) {
-  //   const Parent &parent = traversal[i];
-  //   os << parent;
-  //   if (i < traversal.size() - 1) {
-  //     os << ", ";
-  //   }
-  // }
-  // os << "}";
   return os.str();
 }
 
