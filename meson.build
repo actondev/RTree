@@ -6,12 +6,21 @@ project('drtree', 'cpp',
 
 include_dirs = include_directories('.')
 
-drtree_dep = declare_dependency(
-  include_directories: include_dirs,
-  sources: [
-    'aod/rtree_base.cpp',
-    ]
+rtree = library('rtree',
+                sources: [
+                  'aod/rtree_base.cpp',
+                ],
+                include_directories:  [
+                  include_dirs,
+                  # include_directories('./test') # debugging
+                  ]
 )
+
+rtree_dep = declare_dependency(
+  include_directories: include_dirs,
+  link_with: rtree
+)
+
 
 if get_option('test')
   subdir('test')

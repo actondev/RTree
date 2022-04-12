@@ -19,9 +19,11 @@ run_tests = executable(
   test_src,
   dependencies : [
     catch2_dep,
-    drtree_dep,
+    rtree_dep,
   ],
   cpp_args: [
+    '-Wno-narrowing',
+    '-Wno-sign-compare'
     # '-DCATCH_CONFIG_ENABLE_BENCHMARKING'
   ]
 )

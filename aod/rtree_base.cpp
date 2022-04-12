@@ -1,8 +1,9 @@
 #include "./rtree_base.hpp"
-#include <easyprint.hpp>
-#define pp(x) easyprint::stringify(x)
+// #include <easyprint.hpp>
+// #define pp(x) easyprint::stringify(x)
 
 #include <iostream>
+#include <sstream>
 #include <set>
 
 #include <assert.h>
@@ -43,6 +44,15 @@ std::ostream &operator<<(std::ostream &os, const rtree_base::Did &id) {
 
 std::ostream &operator<<(std::ostream &os, const rtree_base::Parent &p) {
   os << "Parent{" << p.entry << "->" << p.node << "}";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const rtree_base::Traversal& tr) {
+  os << "Traversal{ " << endl;
+  for(auto const &parent : tr) {
+    os << parent << ", ";
+  }
+  os << " }";
   return os;
 }
 
@@ -93,7 +103,7 @@ rtree_base::ELEMTYPE& rtree_base::rect_high_ref(const Rid &r, int dim) {
   return m_rects_high[r.id * m_dims + dim];
 }
 void rtree_base::copy_rect(Rid src, Rid dst) {
-  for (auto i = 0; i < m_dims; ++i) {
+  for (uint i = 0; i < m_dims; ++i) {
     rect_low_ref(dst, i) = rect_low_ref(src, i);
     rect_high_ref(dst, i) = rect_high_ref(src, i);
   }
@@ -155,7 +165,7 @@ rtree_base::Eid rtree_base::choose_subtree(Nid n, Rid r) {
   Node &node = get_node(n);
   ASSERT(node.count);
 
-  for (int i = 0; i < node.count; i++) {
+  for (uint i = 0; i < node.count; i++) {
     Eid e = get_node_entry(n, i);
     Entry &entry = get_entry(e);
     Rid entry_rect = entry.rect_id;
@@ -180,7 +190,7 @@ rtree_base::Eid rtree_base::choose_subtree(Nid n, Rid r) {
 }
 
 void rtree_base::combine_rects(Rid a, Rid b, Rid dst) {
-  for (int i = 0; i < m_dims; i++) {
+  for (uint i = 0; i < m_dims; i++) {
     rect_low_ref(dst, i) = Min(rect_low_ref(a, i), rect_low_ref(b, i));
     rect_high_ref(dst, i) = Max(rect_high_ref(a, i), rect_high_ref(b, i));
   }
@@ -198,11 +208,11 @@ void rtree_base::update_entry_rect(Eid e) {
   // going through the child node entries
   Eid child0 = get_node_entry(n, 0);
   const Entry &child_entry = get_entry(child0);
-  for (int i = 0; i < m_dims; i++) {
+  for (uint i = 0; i < m_dims; i++) {
     rect_low_ref(r, i) = rect_low_ref(child_entry.rect_id, i);
     rect_high_ref(r, i) = rect_high_ref(child_entry.rect_id, i);
   }
-  for (int i = 1; i < node.count; ++i) {
+  for (uint i = 1; i < node.count; ++i) {
     Eid child = get_node_entry(n, i);
     combine_rects(get_entry(child).rect_id, r, r);
   }
@@ -217,7 +227,7 @@ void rtree_base::insert(const Vec &low, const Vec &high, Did did) {
 
   const Rid r = entry.rect_id;
 
-  for (int i = 0; i < m_dims; ++i) {
+  for (uint i = 0; i < m_dims; ++i) {
     rect_low_ref(r, i) = low[i];
     rect_high_ref(r, i) = high[i];
   }
@@ -289,7 +299,7 @@ rtree_base::Nid rtree_base::split_and_insert(Nid n, Eid e) {
   entries.clear();
   entries.resize(M + 1);
 
-  for (int i = 0; i < node.count; ++i) {
+  for (uint i = 0; i < node.count; ++i) {
     entries[i] = get_node_entry(n, i);
   }
   entries[M] = e; // the new entry
@@ -334,18 +344,18 @@ void rtree_base::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   entries[seeds[0]] = entries.back();
   entries.pop_back();
 
-  ASSERT(entries.size() == M - 1); // (M+1) -2
+  ASSERT(entries.size() == static_cast<uint>(M - 1)); // (M+1) -2
 
   ELEMTYPE biggestDiff;
-  int group, entry_index = 0, betterGroup = 0;
+  uint group, entry_index = 0, betterGroup = 0;
   // existing node: group[0], new node: group[1]
   const Nid groups[2] = {n, nn};
   const Node *nodes[2] = {&node, &new_node};
-  const int max_fill = M + 1 - m;
+  const uint max_fill = M + 1 - m;
   while (!entries.empty() && node.count < max_fill &&
          new_node.count < max_fill) {
     biggestDiff = (ELEMTYPE)-1;
-    for (int i = 0; i < entries.size(); ++i) {
+    for (uint i = 0; i < entries.size(); ++i) {
       const Entry &entry = get_entry(entries[i]);
       const Rid r = entry.rect_id;
       combine_rects(r, m_partition.groups_rects[0], m_partition.temp_rects[0]);
@@ -420,7 +430,7 @@ void rtree_base::adjust_rects(const Traversal &traversal) {
 void rtree_base::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
   const bool dbg = false; // e.id == 159;
   if (dbg) {
-    // cout << ">>> adjust tree " << pp(traversal) << " " << e << " nn " << nn
+    // cout << ">>> adjust tree " << traversal << " " << e << " nn " << nn
     // << endl;
   }
   Nid n;
@@ -446,8 +456,9 @@ void rtree_base::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
       }
     }
 
+    bool is_above_new_node = level < (int)traversal.size() - 1;
     // propagating new node (split) upwards.
-    if (nn && level < traversal.size() - 1) {
+    if (nn && is_above_new_node) {
       const Node &new_node = get_node(nn);
       ASSERT(parent_node.height == new_node.height + 1);
 
@@ -500,7 +511,7 @@ void rtree_base::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
 /// from Superliminal rtree
 rtree_base::Seeds rtree_base::pick_seeds(const std::vector<Eid> &entries) {
   Seeds res;
-  ASSERT(entries.size() == static_cast<unsigned>(M + 1));
+  ASSERT(entries.size() == static_cast<uint>(M + 1));
 
   copy_rect(get_entry(entries[0]).rect_id, m_partition.cover_rect);
   for (size_t i = 0; i < entries.size(); ++i) {
@@ -932,13 +943,6 @@ void rtree_base::rect_to_string(Rid rid, std::ostream &os) {
 std::string rtree_base::rect_to_string(Rid rid) {
   std::ostringstream os;
   rect_to_string(rid, os);
-  return os.str();
-}
-
-std::string rtree_base::traversal_to_string(const Traversal &traversal) {
-  std::ostringstream os;
-  os << "Traversal{" << pp(traversal) << "}";
-
   return os.str();
 }
 

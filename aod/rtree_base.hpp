@@ -71,9 +71,9 @@ class rtree_base {
     Xml(rtree_base *tree) : tree{tree} {}
     friend std::ostream &operator<<(std::ostream &os, const Xml& xml);
   };
+  using Traversal = std::vector<Parent>;
 
  protected:
-  using Traversal = std::vector<Parent>;
   using Traversals = std::vector<Traversal>;
 
   using Predicate = std::function<bool(Did)>;

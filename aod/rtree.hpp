@@ -1138,3 +1138,5 @@ PRE std::string QUAL::traversal_to_string(const Traversal &traversal) {
 
 } // namespace aod
 #undef pp
+#undef PRE
+#undef QUAL
