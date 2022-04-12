@@ -1,10 +1,13 @@
 #include "./rtree_base.hpp"
 #include <easyprint.hpp>
 #define pp(x) easyprint::stringify(x)
+
+#include <iostream>
 #include <set>
 
 #include <assert.h>
-#define ASSERT assert // RTree uses ASSERT( condition )
+#define ASSERT assert
+
 #ifndef Min
 #define Min std::min
 #endif // Min
@@ -14,6 +17,9 @@
 
 
 namespace aod {
+
+using std::cout;
+using std::endl;
 
 std::ostream &operator<<(std::ostream &os, const rtree_base::Eid &id) {
   os << "Eid{" << id.id << "}";
@@ -288,7 +294,7 @@ rtree_base::Nid rtree_base::split_and_insert(Nid n, Eid e) {
   }
   entries[M] = e; // the new entry
 
-  std::array<int, 2> seeds = pick_seeds(entries);
+  Seeds seeds = pick_seeds(entries);
 
   node.count = 0; // TODO free up entries (entry ids) to be reused
   new_node.count = 0;
@@ -308,7 +314,7 @@ rtree_base::Nid rtree_base::split_and_insert(Nid n, Eid e) {
 }
 
 void rtree_base::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
-                                    const std::array<int, 2> &seeds) {
+                                    const Seeds &seeds) {
   const Node &node = get_node(n);
   const Node &new_node = get_node(nn);
 
@@ -492,12 +498,12 @@ void rtree_base::adjust_tree(const Traversal &traversal, Eid e, Nid nn) {
 /// Pick first entry for each group. We get 2 groups after splitting a
 /// node. Returns the entries indexes of those seed entries.  Code
 /// from Superliminal rtree
-std::array<int, 2> rtree_base::pick_seeds(const std::vector<Eid> &entries) {
-  std::array<int, 2> res;
-  ASSERT(entries.size() == M + 1);
+rtree_base::Seeds rtree_base::pick_seeds(const std::vector<Eid> &entries) {
+  Seeds res;
+  ASSERT(entries.size() == static_cast<unsigned>(M + 1));
 
   copy_rect(get_entry(entries[0]).rect_id, m_partition.cover_rect);
-  for (int i = 0; i < entries.size(); ++i) {
+  for (size_t i = 0; i < entries.size(); ++i) {
     combine_rects(m_partition.cover_rect, get_entry(entries[i]).rect_id,
                   m_partition.cover_rect);
   }
@@ -934,6 +940,17 @@ std::string rtree_base::traversal_to_string(const Traversal &traversal) {
   os << "Traversal{" << pp(traversal) << "}";
 
   return os.str();
+}
+
+std::ostream &operator<<(std::ostream &os, const rtree_base::Xml& xml) {
+  os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
+     << std::endl;
+  xml.tree->to_string(xml.spaces, os);
+  return os;
+}
+
+rtree_base::Xml rtree_base::to_xml() {
+  return Xml(this);
 }
 
 // 

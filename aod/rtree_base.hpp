@@ -2,22 +2,22 @@
 
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <limits>
 #include <ostream>
 #include <vector>
 #define ASSERT assert
 namespace aod {
 
-using std::cout;
-using std::endl;
-
-using id_t = uint32_t;
-
-
 class rtree_base {
  public:
   using ELEMTYPE = double;
+  using  Vec = std::vector<ELEMTYPE>;
+  using id_t = uint32_t;
+
+  struct Rid;
+  struct Nid;
+  struct Eid;
+  struct Did;
 
   struct Id {
     static const id_t nullid = std::numeric_limits<id_t>::max();
@@ -61,24 +61,23 @@ class rtree_base {
     int height = 0; ///< zero for leaf, positive otherwise
     Rid rect_id;  // rect (mbr) for Node
   };
+
+  friend struct Xml;
+
+  struct Xml {
+    rtree_base *tree;
+    int spaces = 4;
+    Xml() = delete;
+    Xml(rtree_base *tree) : tree{tree} {}
+    friend std::ostream &operator<<(std::ostream &os, const Xml& xml);
+  };
+
  protected:
   using Traversal = std::vector<Parent>;
   using Traversals = std::vector<Traversal>;
 
   using Predicate = std::function<bool(Did)>;
   using SearchCb = std::function<bool(Did)>;
-  struct Xml {
-    rtree_base *tree;
-    int spaces = 4;
-    Xml() = delete;
-    Xml(rtree_base *tree) : tree{tree} {}
-    friend std::ostream &operator<<(std::ostream &os, const Xml &o) {
-      os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
-         << endl;
-      o.tree->to_string(o.spaces, os);
-      return os;
-    }
-  };
 
   /// Helper struct used in partitioning M+1 entries into two groups
   struct Partition {
@@ -119,16 +118,12 @@ class rtree_base {
   Rid make_rect_id();
   Nid make_node_id();
   Eid make_entry_id();
+  Did make_data_id();
   // Did make_data_id(); // protected
   // void set_data(Did did, const DATATYPE &data) {
   //   ASSERT(did);
   //   m_data[did.id] = data;
   // }
-
-  // const DATATYPE &get_data(Did did) {
-  //   ASSERT(did);
-  //   return m_data[did.id];
-  // };
 
   Eid get_node_entry(Nid n, int idx);
   void set_node_entry(Nid n, int idx, Eid e);
@@ -152,23 +147,12 @@ class rtree_base {
 
   void copy_rect(Rid src, Rid dst);
 
- protected:
-  
-  Did make_data_id();
-public:
-  using  Vec = std::vector<ELEMTYPE>;
-  rtree_base() = delete;
-  rtree_base(int dimensions);
   void insert(const Vec &low, const Vec &high, Did);
-  size_t size();
+
   std::vector<Did> search(const Vec &low, const Vec &high);
   void search(const Vec &low, const Vec &high, std::vector<Did> &results);
-  int remove(const Vec &low, const Vec &high);
   std::string to_string();
-  void to_string(int spaces, std::ostream &);
-  Xml to_xml() { return Xml(this); }
 
-private:
   void reinsert_entry(Eid e);
   /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
   /// new node id
@@ -178,9 +162,11 @@ private:
   /// propagating node splits as necessary
   void adjust_tree(const Traversal &traversal, Eid e, Nid nn);
   void adjust_rects(const Traversal &traversal);
-  std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
+
+  using Seeds = std::array<size_t, 2>;
+  Seeds pick_seeds(const std::vector<Eid> &entries);
   void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
-                          const std::array<int, 2> &seeds);
+                          const Seeds &seeds);
   void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
 
   bool search(Nid, Rid, int &found_count, const SearchCb&);
@@ -219,6 +205,14 @@ private:
 
   void combine_rects(Rid a, Rid b, Rid dst);
   void update_entry_rect(Eid e);
+
+public:
+  Xml to_xml();
+  size_t size();
+  rtree_base() = delete;
+  rtree_base(int dimensions);
+  void to_string(int spaces, std::ostream &);
+  int remove(const Vec &low, const Vec &high);
 };
 
 }
