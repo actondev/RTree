@@ -6,7 +6,7 @@ project('drtree', 'cpp',
 
 include_dirs = include_directories('.')
 
-rtree = library('rtree',
+rtree = static_library('rtree',
                 sources: [
                   'aod/rtree_base.cpp',
                 ],
@@ -18,7 +18,11 @@ rtree = library('rtree',
 
 rtree_dep = declare_dependency(
   include_directories: include_dirs,
-  link_with: rtree
+  # performance impact when using linked version?
+  # link_with: rtree,
+  sources: [
+    'aod/rtree_base.cpp',
+  ],
 )
 
 

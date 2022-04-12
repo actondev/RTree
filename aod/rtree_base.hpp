@@ -132,9 +132,11 @@ class rtree_base {
 
   Entry &get_entry(Eid e);
 
-  ELEMTYPE rect_volume(Rid);
-  ELEMTYPE &rect_low_ref(const Rid &r, int dim);
-  ELEMTYPE &rect_high_ref(const Rid &r, int dim);
+  inline ELEMTYPE rect_volume(Rid);
+  inline ELEMTYPE &rect_low_ref(const Rid &r, int dim);
+  inline ELEMTYPE &rect_high_ref(const Rid &r, int dim);
+  inline bool rect_contains(Rid bigger, Rid smaller);
+  inline bool rects_overlap(Rid, Rid);
 
   std::string rect_to_string(Rid);
   void rect_to_string(Rid, std::ostream &os);
@@ -170,8 +172,6 @@ class rtree_base {
   void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
 
   bool search(Nid, Rid, int &found_count, const SearchCb&);
-  bool rect_contains(Rid bigger, Rid smaller);
-  inline bool rects_overlap(Rid, Rid);
 
   /// insert entry into leaf node: if a split occured, returns a valid new node
   Nid insert(Nid, Eid);
