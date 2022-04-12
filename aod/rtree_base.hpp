@@ -1,0 +1,224 @@
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <limits>
+#include <ostream>
+#include <vector>
+#define ASSERT assert
+namespace aod {
+
+using std::cout;
+using std::endl;
+
+using id_t = uint32_t;
+
+
+class rtree_base {
+ public:
+  using ELEMTYPE = double;
+
+  struct Id {
+    static const id_t nullid = std::numeric_limits<id_t>::max();
+    id_t id = nullid; //
+    operator bool() const { return id != nullid; }
+    Id() : Id(nullid){};
+    Id(const Id &other) : Id(other.id){};
+    Id(id_t id) : id{id} {}
+    friend bool operator==(const Id &lhs, const Id &rhs) {
+      return lhs.id == rhs.id;
+    }
+    // for ordered set
+    friend bool operator<(const Id &lhs, const Id &rhs) {
+      return lhs.id < rhs.id;
+    }
+  };
+
+  // Rect Id
+  struct Rid : Id {};
+  /// Node Id
+  struct Nid : Id {};
+  /// Entry Id. Each node has `m <= count <= M` children
+  struct Eid : Id {};
+  /// Data id
+  struct Did : Id {};
+  
+  struct Entry {
+  Rid rect_id;
+  Nid child_id;
+  Did data_id;
+};
+  struct Parent {
+  Eid entry;
+  Nid node;
+};
+  struct Node {
+    bool is_internal() const { return (height > 0); }
+    bool is_leaf() const { return (height == 0); } // A leaf contains data
+
+    int count = 0;  ///< children entries count. Between m and M
+    int height = 0; ///< zero for leaf, positive otherwise
+    Rid rect_id;  // rect (mbr) for Node
+  };
+ protected:
+  using Traversal = std::vector<Parent>;
+  using Traversals = std::vector<Traversal>;
+
+  using Predicate = std::function<bool(Did)>;
+  using SearchCb = std::function<bool(Did)>;
+  struct Xml {
+    rtree_base *tree;
+    int spaces = 4;
+    Xml() = delete;
+    Xml(rtree_base *tree) : tree{tree} {}
+    friend std::ostream &operator<<(std::ostream &os, const Xml &o) {
+      os << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>"
+         << endl;
+      o.tree->to_string(o.spaces, os);
+      return os;
+    }
+  };
+
+  /// Helper struct used in partitioning M+1 entries into two groups
+  struct Partition {
+    std::vector<Eid> entries; // up to M+1
+    Rid groups_rects[2];      // each group's MBR
+    ELEMTYPE groups_areas[2]; // area covered by each group's MBR
+    Rid temp_rects[2];        // temporary rect for each group, comparing growth
+    std::vector<ELEMTYPE> entries_areas;
+    Rid cover_rect;
+    ELEMTYPE cover_area = 0;
+  };
+  /// max entries per node (best 8?)
+  const int M = 8;
+
+  /// min entries per node. Could be hardcoded 2 as well, the paper
+  /// shows good performance with hardcoded 2 as well
+  const int m = M / 2;
+
+  int m_dims;
+
+  size_t m_size = 0;
+  id_t m_rects_count = 0;
+  id_t m_entries_count = 0;
+  id_t m_nodes_count = 0;
+  id_t m_data_count = 0;
+  Nid m_root_id;
+  Rid m_temp_rect;
+  Partition m_partition;
+
+  Traversal m_traversal;
+
+  std::vector<ELEMTYPE> m_rects_low;
+  std::vector<ELEMTYPE> m_rects_high;
+  std::vector<Node> m_nodes;
+  std::vector<Eid> m_node_entries;
+  std::vector<Entry> m_entries;
+
+  Rid make_rect_id();
+  Nid make_node_id();
+  Eid make_entry_id();
+  // Did make_data_id(); // protected
+  // void set_data(Did did, const DATATYPE &data) {
+  //   ASSERT(did);
+  //   m_data[did.id] = data;
+  // }
+
+  // const DATATYPE &get_data(Did did) {
+  //   ASSERT(did);
+  //   return m_data[did.id];
+  // };
+
+  Eid get_node_entry(Nid n, int idx);
+  void set_node_entry(Nid n, int idx, Eid e);
+
+  Node &get_node(Nid n);
+
+  Entry &get_entry(Eid e);
+
+  ELEMTYPE rect_volume(Rid);
+  ELEMTYPE &rect_low_ref(const Rid &r, int dim);
+  ELEMTYPE &rect_high_ref(const Rid &r, int dim);
+
+  std::string rect_to_string(Rid);
+  void rect_to_string(Rid, std::ostream &os);
+  std::string traversal_to_string(const Traversal &traversal);
+  std::string node_to_string(Nid nid, int level = 0, int spaces = 4);
+  void node_to_string(Nid nid, int level, int spaces, std::ostream &);
+  std::string entry_to_string(Eid, int level = 0, int spaces = 4);
+  void entry_to_string(Eid, int level, int spaces, std::ostream &);
+  bool has_duplicate_nodes();
+
+  void copy_rect(Rid src, Rid dst);
+
+ protected:
+  
+  Did make_data_id();
+public:
+  using  Vec = std::vector<ELEMTYPE>;
+  rtree_base() = delete;
+  rtree_base(int dimensions);
+  void insert(const Vec &low, const Vec &high, Did);
+  size_t size();
+  std::vector<Did> search(const Vec &low, const Vec &high);
+  void search(const Vec &low, const Vec &high, std::vector<Did> &results);
+  int remove(const Vec &low, const Vec &high);
+  std::string to_string();
+  void to_string(int spaces, std::ostream &);
+  Xml to_xml() { return Xml(this); }
+
+private:
+  void reinsert_entry(Eid e);
+  /// Splits node, places the new M+1 entries (old & new one "e"), & returns the
+  /// new node id
+  Nid split_and_insert(Nid n, Eid e);
+
+  /// Ascend from leaf node L to the root, adjusting rectangles and
+  /// propagating node splits as necessary
+  void adjust_tree(const Traversal &traversal, Eid e, Nid nn);
+  void adjust_rects(const Traversal &traversal);
+  std::array<int, 2> pick_seeds(const std::vector<Eid> &entries);
+  void distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
+                          const std::array<int, 2> &seeds);
+  void distribute_entries_naive(Nid n, Nid nn, std::vector<Eid> entries);
+
+  bool search(Nid, Rid, int &found_count, const SearchCb&);
+  bool rect_contains(Rid bigger, Rid smaller);
+  inline bool rects_overlap(Rid, Rid);
+
+  /// insert entry into leaf node: if a split occured, returns a valid new node
+  Nid insert(Nid, Eid);
+  void plain_insert(Nid, Eid);
+  Nid choose_leaf(Rid r, Traversal &traversal);
+  Nid choose_node(Nid n, Rid r, int height, Traversal &traversal);
+  Eid choose_subtree(Nid n, Rid r);
+
+  /// Given an R-tree whose root node is T, find the leaf node
+  /// containing the index entry E
+  Nid find_lead(Nid T, Rid r);
+
+  /// Given a leaf node L, from which an entry has been deleted,
+  /// eliminate the node if it has too few entries and relocate its
+  /// entries. Propagate node elimination upward as necessary. Adjust
+  /// all covering rectagles on the path to the root, making them
+  /// smaller if possible
+
+  void remove(Nid n, Rid r, int &removed, Traversals &,
+              const Traversal &cur_traversal, Predicate cb);
+
+  bool remove_node_entry(Nid n, Eid e);
+  void remove_node_entry(Nid n, int idx);
+
+  /// Called after removal of Node(s), by passing the traversal(s) of
+  /// the tree that took place for the removed entries
+  void condense_tree(const Traversals &);
+
+  int count(Nid n);
+  void count(Nid n, int &); // recursive
+
+  void combine_rects(Rid a, Rid b, Rid dst);
+  void update_entry_rect(Eid e);
+};
+
+}

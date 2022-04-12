@@ -42,16 +42,16 @@ template <typename T>
 using is_const_iterable_v = typename is_const_iterable<T>::type;
 
 template <typename T>
-void print_iterator_helper(std::false_type, std::ostream &os, const T &cont) {
+inline void print_iterator_helper(std::false_type, std::ostream &os, const T &cont) {
   os << cont;
 }
 
-void print_iterator_helper(std::false_type, std::ostream &os, const char *cont) {
+inline void print_iterator_helper(std::false_type, std::ostream &os, const char *cont) {
   os << "\"" << cont << "\"";
 }
 
 template <typename TChar>
-void print_iterator_helper(std::true_type, std::ostream &os,
+inline void print_iterator_helper(std::true_type, std::ostream &os,
                            const std::basic_string<TChar> &cont) {
   os << "\"" << cont << "\"";
 }
@@ -59,19 +59,19 @@ void print_iterator_helper(std::true_type, std::ostream &os,
 // Functions to recursively print tuples
 template <size_t I, typename T>
 typename std::enable_if<(!is_tuple<T>::value), void>::type
-print_tuple(std::ostream &os, const T &cont) {
+inline print_tuple(std::ostream &os, const T &cont) {
   print_iterator_helper(is_const_iterable_v<T>(), os, cont);
 }
 
 template <size_t I, typename... Targs>
 typename std::enable_if<(I == sizeof...(Targs)), void>::type
-print_tuple(std::ostream &os, const std::tuple<Targs...> &tup) {
+inline print_tuple(std::ostream &os, const std::tuple<Targs...> &tup) {
   os << default_delimiter<std::tuple<Targs...>>::end_delimiter;
 }
 
 template <size_t I, typename... Targs>
 typename std::enable_if<(I < sizeof...(Targs)), void>::type
-print_tuple(std::ostream &os, const std::tuple<Targs...> &tup) {
+inline print_tuple(std::ostream &os, const std::tuple<Targs...> &tup) {
   os << tuple_delimiter<I>::value;
   auto val = std::get<I>(tup);
   print_tuple<0>(os, val);
@@ -79,11 +79,11 @@ print_tuple(std::ostream &os, const std::tuple<Targs...> &tup) {
 }
 
 template <typename T>
-void print_iterator_helper(std::true_type, std::ostream &os, const T &cont);
+inline void print_iterator_helper(std::true_type, std::ostream &os, const T &cont);
 
 // Pair specialisation
 template <typename T1, typename T2>
-void print_iterator_helper(std::false_type, std::ostream &os,
+inline void print_iterator_helper(std::false_type, std::ostream &os,
                            const std::pair<T1, T2> &cont) {
   os << default_delimiter<decltype(cont)>::start_delimiter;
   print_iterator_helper(is_const_iterable_v<T1>(), os, cont.first);
@@ -96,14 +96,14 @@ void print_iterator_helper(std::false_type, std::ostream &os,
 // Passes control to tuple printing
 // functions
 template <typename... Targs>
-void print_iterator_helper(std::false_type, std::ostream &os,
+inline void print_iterator_helper(std::false_type, std::ostream &os,
                            const std::tuple<Targs...> &cont) {
   print_tuple<0>(os, cont);
 }
 
 // Recursive function to print iterators
 template <typename T>
-void print_iterator_helper(std::true_type, std::ostream &os, const T &cont) {
+inline void print_iterator_helper(std::true_type, std::ostream &os, const T &cont) {
   os << default_delimiter<decltype(cont)>::start_delimiter;
   if (!cont.empty()) {
     auto it = cont.begin();
@@ -119,14 +119,14 @@ void print_iterator_helper(std::true_type, std::ostream &os, const T &cont) {
 
 // User-facing functions
 template <typename T>
-std::string stringify(const T &container) {
+inline std::string stringify(const T &container) {
   std::stringstream ss;
   print_iterator_helper(is_const_iterable_v<T>(), ss, container);
   return ss.str();
 }
 
 template <typename T>
-void print(const T &container) {
+inline void print(const T &container) {
   std::cout << Stringify(container);
 }
 

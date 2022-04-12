@@ -7,7 +7,10 @@ project('drtree', 'cpp',
 include_dirs = include_directories('.')
 
 drtree_dep = declare_dependency(
-  include_directories: include_dirs
+  include_directories: include_dirs,
+  sources: [
+    'aod/rtree_base.cpp',
+    ]
 )
 
 if get_option('test')
