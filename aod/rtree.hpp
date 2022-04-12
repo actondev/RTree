@@ -35,13 +35,10 @@ struct Id {
 
 // Rect Id
 struct Rid : Id {};
-
 /// Node Id
 struct Nid : Id {};
-
 /// Entry Id. Each node has `m <= count <= M` children
 struct Eid : Id {};
-
 /// Data id
 struct Did : Id {};
 
@@ -93,8 +90,7 @@ std::ostream &operator<<(std::ostream &os, const Parent &p) {
 template <class DATATYPE, class ELEMTYPE = double> class rtree {
   static_assert(std::numeric_limits<ELEMTYPE>::is_iec559,
                 "'ELEMTYPE' accepts floating-point types only");
-
-  typedef std::vector<ELEMTYPE> Vec;
+  using Vec = std::vector<ELEMTYPE>;
 
   using Traversal = std::vector<Parent>;
   using Traversals = std::vector<Traversal>;
@@ -203,7 +199,7 @@ private:
 
   Entry &get_entry(Eid e) { return m_entries[e.id]; }
 
-  ELEMTYPE rect_volume(Rid);
+  inline ELEMTYPE rect_volume(Rid);
 
   inline ELEMTYPE &rect_low_ref(const Rid &r, int dim) {
     return m_rects_low[r.id * m_dims + dim];

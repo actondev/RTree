@@ -35,7 +35,7 @@
 #define RTREE_QUAL                                                             \
   RTree<DATATYPE, ELEMTYPE, MAXDIMS, ELEMTYPEREAL, TMAXNODES, TMINNODES>
 
-#define RTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower
+// #define RTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower
                                    // on some systems
 
 // Fwd decl
