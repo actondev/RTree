@@ -11,7 +11,7 @@ namespace aod {
 class rtree_base {
  public:
   using ELEMTYPE = double;
-  using  Vec = std::vector<ELEMTYPE>;
+  using Vec = std::vector<ELEMTYPE>;
   using id_t = uint32_t;
 
   struct Rid;
@@ -89,7 +89,9 @@ class rtree_base {
     Rid cover_rect;
     ELEMTYPE cover_area = 0;
   };
+
   /// max entries per node (best 8?)
+  // TODO configurable in ctor
   const int M = 8;
 
   /// min entries per node. Could be hardcoded 2 as well, the paper
@@ -132,8 +134,8 @@ class rtree_base {
   Entry &get_entry(Eid e);
 
   ELEMTYPE rect_volume(Rid) const;
-  const ELEMTYPE &rect_low_ro(const Rid &r, int dim) const;
-  const ELEMTYPE &rect_high_ro(const Rid &r, int dim) const;
+  const ELEMTYPE rect_low_ro(const Rid &r, int dim) const;
+  const ELEMTYPE rect_high_ro(const Rid &r, int dim) const;
   ELEMTYPE &rect_low_rw(const Rid &r, int dim);
   ELEMTYPE &rect_high_rw(const Rid &r, int dim);
   bool rect_contains(Rid bigger, Rid smaller) const;
@@ -189,7 +191,6 @@ class rtree_base {
   /// entries. Propagate node elimination upward as necessary. Adjust
   /// all covering rectagles on the path to the root, making them
   /// smaller if possible
-
   void remove(Nid n, Rid r, int &removed, Traversals &,
               const Traversal &cur_traversal, Predicate cb);
 

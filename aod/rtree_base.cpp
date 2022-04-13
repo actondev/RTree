@@ -93,19 +93,20 @@ inline void rtree_base::set_node_entry(Nid n, int idx, Eid e) {
   m_node_entries[n.id * M + idx] = e;
 }
 
-// TODO inline? noexcept?
-// rects stuff
-
+// TODO noexcept? inline has a great impact in performance!
+// Especially when used as a (statically) linked lib vs just
+// compiling together the sources.
 inline rtree_base::ELEMTYPE& rtree_base::rect_low_rw(const Rid &r, int dim) {
   return m_rects_low[r.id * m_dims + dim];
 }
 inline rtree_base::ELEMTYPE& rtree_base::rect_high_rw(const Rid &r, int dim) {
   return m_rects_high[r.id * m_dims + dim];
 }
-inline const rtree_base::ELEMTYPE& rtree_base::rect_low_ro(const Rid &r, int dim) const {
+// const ref vs value? makes no difference I guess
+inline const rtree_base::ELEMTYPE rtree_base::rect_low_ro(const Rid &r, int dim) const {
   return m_rects_low[r.id * m_dims + dim];
 }
-inline const rtree_base::ELEMTYPE& rtree_base::rect_high_ro(const Rid &r, int dim) const {
+inline const rtree_base::ELEMTYPE rtree_base::rect_high_ro(const Rid &r, int dim) const {
   return m_rects_high[r.id * m_dims + dim];
 }
 
@@ -122,7 +123,7 @@ inline rtree_base::ELEMTYPE rtree_base::rect_volume(Rid r) const {
   return volume;
 }
 inline bool rtree_base::rect_contains(Rid bigger, Rid smaller) const {
-  for (unsigned int index = 0; index < m_dims; ++index) {
+  for (int index = 0; index < m_dims; ++index) {
     if (rect_low_ro(bigger, index) > rect_low_ro(smaller, index) ||
         rect_high_ro(bigger, index) < rect_high_ro(smaller, index)) {
       return false;
@@ -131,7 +132,7 @@ inline bool rtree_base::rect_contains(Rid bigger, Rid smaller) const {
   return true;
 }
 inline bool rtree_base::rects_overlap(Rid a, Rid b) const {
-  for (unsigned int index = 0; index < m_dims; ++index) {
+  for (int index = 0; index < m_dims; ++index) {
     if (rect_low_ro(a, index) > rect_high_ro(b, index) ||
         rect_low_ro(b, index) > rect_high_ro(a, index)) {
       return false;
@@ -141,13 +142,13 @@ inline bool rtree_base::rects_overlap(Rid a, Rid b) const {
 }
 
 inline void rtree_base::copy_rect(Rid src, Rid dst) {
-  for (uint i = 0; i < m_dims; ++i) {
+  for (int i = 0; i < m_dims; ++i) {
     rect_low_rw(dst, i) = rect_low_ro(src, i);
     rect_high_rw(dst, i) = rect_high_ro(src, i);
   }
 }
 inline void rtree_base::combine_rects(Rid a, Rid b, Rid dst) {
-  for (uint i = 0; i < m_dims; i++) {
+  for (int i = 0; i < m_dims; i++) {
     rect_low_rw(dst, i) = Min(rect_low_ro(a, i), rect_low_ro(b, i));
     rect_high_rw(dst, i) = Max(rect_high_ro(a, i), rect_high_ro(b, i));
   }
@@ -209,7 +210,7 @@ rtree_base::Eid rtree_base::choose_subtree(Nid n, Rid r) {
   Node &node = get_node(n);
   ASSERT(node.count);
 
-  for (uint i = 0; i < node.count; i++) {
+  for (int i = 0; i < node.count; i++) {
     Eid e = get_node_entry(n, i);
     Entry &entry = get_entry(e);
     Rid entry_rect = entry.rect_id;
@@ -245,11 +246,11 @@ void rtree_base::update_entry_rect(Eid e) {
   // going through the child node entries
   Eid child0 = get_node_entry(n, 0);
   const Entry &child_entry = get_entry(child0);
-  for (uint i = 0; i < m_dims; i++) {
+  for (int i = 0; i < m_dims; i++) {
     rect_low_rw(r, i) = rect_low_ro(child_entry.rect_id, i);
     rect_high_rw(r, i) = rect_high_ro(child_entry.rect_id, i);
   }
-  for (uint i = 1; i < node.count; ++i) {
+  for (int i = 1; i < node.count; ++i) {
     Eid child = get_node_entry(n, i);
     combine_rects(get_entry(child).rect_id, r, r);
   }
@@ -264,7 +265,7 @@ void rtree_base::insert(const Vec &low, const Vec &high, Did did) {
 
   const Rid r = entry.rect_id;
 
-  for (uint i = 0; i < m_dims; ++i) {
+  for (int i = 0; i < m_dims; ++i) {
     rect_low_rw(r, i) = low[i];
     rect_high_rw(r, i) = high[i];
   }
@@ -336,7 +337,7 @@ rtree_base::Nid rtree_base::split_and_insert(Nid n, Eid e) {
   entries.clear();
   entries.resize(M + 1);
 
-  for (uint i = 0; i < node.count; ++i) {
+  for (int i = 0; i < node.count; ++i) {
     entries[i] = get_node_entry(n, i);
   }
   entries[M] = e; // the new entry
@@ -388,7 +389,7 @@ void rtree_base::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
   // existing node: group[0], new node: group[1]
   const Nid groups[2] = {n, nn};
   const Node *nodes[2] = {&node, &new_node};
-  const uint max_fill = M + 1 - m;
+  const int max_fill = M + 1 - m;
   while (!entries.empty() && node.count < max_fill &&
          new_node.count < max_fill) {
     biggestDiff = (ELEMTYPE)-1;
@@ -446,17 +447,18 @@ void rtree_base::distribute_entries(Nid n, Nid nn, std::vector<Eid> entries,
 
 void rtree_base::distribute_entries_naive(Nid n, Nid nn,
                                           std::vector<Eid> entries) {
-  int half = entries.size() / 2 + 1;
-  for (int i = 0; i < half; ++i) {
+  uint half = entries.size() / 2 + 1;
+  for (uint i = 0; i < half; ++i) {
     plain_insert(n, entries[i]);
   }
-  for (int i = half; i < entries.size(); ++i) {
+  for (uint i = half; i < entries.size(); ++i) {
     plain_insert(nn, entries[i]);
   }
 }
 
 void rtree_base::adjust_rects(const Traversal &traversal) {
-  for (int i = traversal.size() - 1; i >= 0; --i) {
+  // important! no uint here (decreasing, want to reach 0)
+  for (int i = static_cast<int>(traversal.size()) - 1; i >= 0; --i) {
     const Parent &parent = traversal[i];
     if (parent.entry) {
       update_entry_rect(parent.entry);
@@ -560,12 +562,12 @@ rtree_base::Seeds rtree_base::pick_seeds(const std::vector<Eid> &entries) {
   int seed0 = 0, seed1 = 0;
   ELEMTYPE worst, waste;
   worst = -m_partition.cover_area - 1;
-  for (int i = 0; i < entries.size(); ++i) {
+  for (uint i = 0; i < entries.size(); ++i) {
     m_partition.entries_areas[i] = rect_volume(get_entry(entries[i]).rect_id);
   }
 
-  for (int i = 0; i < entries.size() - 1; ++i) {
-    for (int j = i + 1; j < entries.size(); ++j) {
+  for (uint i = 0; i < entries.size() - 1; ++i) {
+    for (uint j = i + 1; j < entries.size(); ++j) {
       combine_rects(get_entry(entries[i]).rect_id,
                     get_entry(entries[j]).rect_id, m_temp_rect);
       waste = rect_volume(m_temp_rect) - m_partition.entries_areas[i] -
@@ -595,8 +597,8 @@ std::vector<rtree_base::Did> rtree_base::search(const Vec &low, const Vec &high)
 
 void rtree_base::search(const Vec &low, const Vec &high,
                         std::vector<Did> &results) {
-  ASSERT(low.size() == m_dims);
-  ASSERT(high.size() == m_dims);
+  ASSERT(low.size() == static_cast<uint>(m_dims));
+  ASSERT(high.size() == static_cast<uint>(m_dims));
   for (int i = 0; i < m_dims; ++i) {
     rect_low_rw(m_temp_rect, i) = low[i];
     rect_high_rw(m_temp_rect, i) = high[i];
@@ -648,8 +650,8 @@ bool rtree_base::search(Nid n, Rid r, int &found_count, const SearchCb &cb) {
 }
 
 int rtree_base::remove(const Vec &low, const Vec &high) {
-  ASSERT(low.size() == m_dims);
-  ASSERT(high.size() == m_dims);
+  ASSERT(low.size() == static_cast<uint>(m_dims));
+  ASSERT(high.size() == static_cast<uint>(m_dims));
   for (int i = 0; i < m_dims; ++i) {
     rect_low_rw(m_temp_rect, i) = low[i];
     rect_high_rw(m_temp_rect, i) = high[i];
@@ -663,7 +665,8 @@ int rtree_base::remove(const Vec &low, const Vec &high) {
   cur_traversal.push_back(p);
   remove(m_root_id, m_temp_rect, removed, remove_traverals, cur_traversal, cb);
 
-  // sorting remove_traverals: longer traverals first, thus leaf node entries (data) removed first
+  // sorting remove_traverals: longer traverals first, thus leaf node
+  // entries (data) removed first
   std::sort(remove_traverals.begin(), remove_traverals.end(),
             [](const Traversal &a, const Traversal &b) {
               return a.size() > b.size();
