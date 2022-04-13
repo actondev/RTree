@@ -82,8 +82,10 @@ rtree_base::Did rtree_base::make_data_id() {
   return d;
 }
 
-inline rtree_base::Node& rtree_base::get_node(Nid n) { return m_nodes[n.id]; }
-inline rtree_base::Entry& rtree_base::get_entry(Eid e) { return m_entries[e.id]; }
+inline rtree_base::Node &rtree_base::get_node(Nid n) { return m_nodes[n.id]; }
+inline rtree_base::Entry &rtree_base::get_entry(Eid e) {
+  return m_entries[e.id];
+}
 inline rtree_base::Eid rtree_base::get_node_entry(Nid n, int idx) const {
   return m_node_entries[n.id * M + idx];
 }
@@ -138,10 +140,16 @@ inline bool rtree_base::rects_overlap(Rid a, Rid b) const {
   return true;
 }
 
-void rtree_base::copy_rect(Rid src, Rid dst) {
+inline void rtree_base::copy_rect(Rid src, Rid dst) {
   for (uint i = 0; i < m_dims; ++i) {
     rect_low_rw(dst, i) = rect_low_ro(src, i);
     rect_high_rw(dst, i) = rect_high_ro(src, i);
+  }
+}
+inline void rtree_base::combine_rects(Rid a, Rid b, Rid dst) {
+  for (uint i = 0; i < m_dims; i++) {
+    rect_low_rw(dst, i) = Min(rect_low_ro(a, i), rect_low_ro(b, i));
+    rect_high_rw(dst, i) = Max(rect_high_ro(a, i), rect_high_ro(b, i));
   }
 }
 
@@ -223,13 +231,6 @@ rtree_base::Eid rtree_base::choose_subtree(Nid n, Rid r) {
     }
   }
   return best;
-}
-
-void rtree_base::combine_rects(Rid a, Rid b, Rid dst) {
-  for (uint i = 0; i < m_dims; i++) {
-    rect_low_rw(dst, i) = Min(rect_low_ro(a, i), rect_low_ro(b, i));
-    rect_high_rw(dst, i) = Max(rect_high_ro(a, i), rect_high_ro(b, i));
-  }
 }
 
 void rtree_base::update_entry_rect(Eid e) {

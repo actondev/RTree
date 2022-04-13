@@ -104,10 +104,10 @@ class rtree_base {
   id_t m_nodes_count = 0;
   id_t m_data_count = 0;
   Nid m_root_id;
-  Rid m_temp_rect;
-  Partition m_partition;
 
-  Traversal m_traversal;
+  mutable Rid m_temp_rect;
+  mutable Partition m_partition;
+  mutable Traversal m_traversal;
 
   std::vector<ELEMTYPE> m_rects_low;
   std::vector<ELEMTYPE> m_rects_high;
@@ -129,7 +129,6 @@ class rtree_base {
   void set_node_entry(Nid n, int idx, Eid e);
 
   Node &get_node(Nid n);
-
   Entry &get_entry(Eid e);
 
   ELEMTYPE rect_volume(Rid) const;
