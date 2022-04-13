@@ -19,9 +19,9 @@ rtree = static_library('rtree',
 rtree_dep = declare_dependency(
   include_directories: include_dirs,
   # performance impact when using linked version?
-  # link_with: rtree,
+  link_with: rtree,
   sources: [
-    'aod/rtree_base.cpp',
+    # 'aod/rtree_base.cpp',
   ],
 )
 

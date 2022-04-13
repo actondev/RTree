@@ -30,6 +30,8 @@ valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree2"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d drtree3"
 valgrind --tool=callgrind ./build/test/run-tests "200x2d aod::rtree"
+
+valgrind --tool=callgrind ./build/test/run-tests "200x2d aod::rtree_data"
    #+end_src
 ** massif (memory allocations)
    massif-visualizer tool

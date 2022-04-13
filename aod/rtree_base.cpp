@@ -63,14 +63,12 @@ rtree_base::Rid rtree_base::make_rect_id() {
 
   return res;
 }
-
 rtree_base::Nid rtree_base::make_node_id() {
   Nid nid{m_nodes_count++};
   m_nodes.resize(m_nodes_count);
   m_node_entries.resize(m_nodes_count * M);
   return nid;
 }
-
 rtree_base::Eid rtree_base::make_entry_id() {
   Eid e{m_entries_count++};
   m_entries.resize(m_entries_count);
@@ -78,34 +76,72 @@ rtree_base::Eid rtree_base::make_entry_id() {
   entry.rect_id = make_rect_id();
   return e;
 }
-
 rtree_base::Did rtree_base::make_data_id() {
   Did d{m_data_count++};
   // m_data.resize(m_data_count);
   return d;
 }
 
-rtree_base::Node& rtree_base::get_node(Nid n) { return m_nodes[n.id]; }
-rtree_base::Entry& rtree_base::get_entry(Eid e) { return m_entries[e.id]; }
-
-rtree_base::Eid rtree_base::get_node_entry(Nid n, int idx) {
+inline rtree_base::Node& rtree_base::get_node(Nid n) { return m_nodes[n.id]; }
+inline rtree_base::Entry& rtree_base::get_entry(Eid e) { return m_entries[e.id]; }
+inline rtree_base::Eid rtree_base::get_node_entry(Nid n, int idx) const {
   return m_node_entries[n.id * M + idx];
 }
-void rtree_base::set_node_entry(Nid n, int idx, Eid e) {
+inline void rtree_base::set_node_entry(Nid n, int idx, Eid e) {
   m_node_entries[n.id * M + idx] = e;
 }
 
 // TODO inline? noexcept?
-rtree_base::ELEMTYPE& rtree_base::rect_low_ref(const Rid &r, int dim) {
+// rects stuff
+
+inline rtree_base::ELEMTYPE& rtree_base::rect_low_rw(const Rid &r, int dim) {
   return m_rects_low[r.id * m_dims + dim];
 }
-rtree_base::ELEMTYPE& rtree_base::rect_high_ref(const Rid &r, int dim) {
+inline rtree_base::ELEMTYPE& rtree_base::rect_high_rw(const Rid &r, int dim) {
   return m_rects_high[r.id * m_dims + dim];
 }
+inline const rtree_base::ELEMTYPE& rtree_base::rect_low_ro(const Rid &r, int dim) const {
+  return m_rects_low[r.id * m_dims + dim];
+}
+inline const rtree_base::ELEMTYPE& rtree_base::rect_high_ro(const Rid &r, int dim) const {
+  return m_rects_high[r.id * m_dims + dim];
+}
+
+inline rtree_base::ELEMTYPE rtree_base::rect_volume(Rid r) const {
+  // RectVolume (TODO add also RectSphericalVolume ?)
+  ELEMTYPE volume = (ELEMTYPE)1;
+
+  for (int i = 0; i < m_dims; ++i) {
+    volume *= rect_high_ro(r, i) - rect_low_ro(r, i);
+  }
+
+  ASSERT(volume >= (ELEMTYPE)0);
+
+  return volume;
+}
+inline bool rtree_base::rect_contains(Rid bigger, Rid smaller) const {
+  for (unsigned int index = 0; index < m_dims; ++index) {
+    if (rect_low_ro(bigger, index) > rect_low_ro(smaller, index) ||
+        rect_high_ro(bigger, index) < rect_high_ro(smaller, index)) {
+      return false;
+    }
+  }
+  return true;
+}
+inline bool rtree_base::rects_overlap(Rid a, Rid b) const {
+  for (unsigned int index = 0; index < m_dims; ++index) {
+    if (rect_low_ro(a, index) > rect_high_ro(b, index) ||
+        rect_low_ro(b, index) > rect_high_ro(a, index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void rtree_base::copy_rect(Rid src, Rid dst) {
   for (uint i = 0; i < m_dims; ++i) {
-    rect_low_ref(dst, i) = rect_low_ref(src, i);
-    rect_high_ref(dst, i) = rect_high_ref(src, i);
+    rect_low_rw(dst, i) = rect_low_ro(src, i);
+    rect_high_rw(dst, i) = rect_high_ro(src, i);
   }
 }
 
@@ -191,8 +227,8 @@ rtree_base::Eid rtree_base::choose_subtree(Nid n, Rid r) {
 
 void rtree_base::combine_rects(Rid a, Rid b, Rid dst) {
   for (uint i = 0; i < m_dims; i++) {
-    rect_low_ref(dst, i) = Min(rect_low_ref(a, i), rect_low_ref(b, i));
-    rect_high_ref(dst, i) = Max(rect_high_ref(a, i), rect_high_ref(b, i));
+    rect_low_rw(dst, i) = Min(rect_low_ro(a, i), rect_low_ro(b, i));
+    rect_high_rw(dst, i) = Max(rect_high_ro(a, i), rect_high_ro(b, i));
   }
 }
 
@@ -209,8 +245,8 @@ void rtree_base::update_entry_rect(Eid e) {
   Eid child0 = get_node_entry(n, 0);
   const Entry &child_entry = get_entry(child0);
   for (uint i = 0; i < m_dims; i++) {
-    rect_low_ref(r, i) = rect_low_ref(child_entry.rect_id, i);
-    rect_high_ref(r, i) = rect_high_ref(child_entry.rect_id, i);
+    rect_low_rw(r, i) = rect_low_ro(child_entry.rect_id, i);
+    rect_high_rw(r, i) = rect_high_ro(child_entry.rect_id, i);
   }
   for (uint i = 1; i < node.count; ++i) {
     Eid child = get_node_entry(n, i);
@@ -228,8 +264,8 @@ void rtree_base::insert(const Vec &low, const Vec &high, Did did) {
   const Rid r = entry.rect_id;
 
   for (uint i = 0; i < m_dims; ++i) {
-    rect_low_ref(r, i) = low[i];
-    rect_high_ref(r, i) = high[i];
+    rect_low_rw(r, i) = low[i];
+    rect_high_rw(r, i) = high[i];
   }
 
   m_traversal.clear();
@@ -547,19 +583,6 @@ rtree_base::Seeds rtree_base::pick_seeds(const std::vector<Eid> &entries) {
   return res;
 }
 
-rtree_base::ELEMTYPE rtree_base::rect_volume(Rid r) {
-  // RectVolume (TODO add also RectSphericalVolume ?)
-  ELEMTYPE volume = (ELEMTYPE)1;
-
-  for (int i = 0; i < m_dims; ++i) {
-    volume *= rect_high_ref(r, i) - rect_low_ref(r, i);
-  }
-
-  ASSERT(volume >= (ELEMTYPE)0);
-
-  return volume;
-}
-
 size_t rtree_base::size() { return m_size; }
 
 std::vector<rtree_base::Did> rtree_base::search(const Vec &low, const Vec &high) {
@@ -574,8 +597,8 @@ void rtree_base::search(const Vec &low, const Vec &high,
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
   for (int i = 0; i < m_dims; ++i) {
-    rect_low_ref(m_temp_rect, i) = low[i];
-    rect_high_ref(m_temp_rect, i) = high[i];
+    rect_low_rw(m_temp_rect, i) = low[i];
+    rect_high_rw(m_temp_rect, i) = high[i];
   }
   SearchCb cb = [&results](const Did &data) {
     results.push_back(data);
@@ -627,8 +650,8 @@ int rtree_base::remove(const Vec &low, const Vec &high) {
   ASSERT(low.size() == m_dims);
   ASSERT(high.size() == m_dims);
   for (int i = 0; i < m_dims; ++i) {
-    rect_low_ref(m_temp_rect, i) = low[i];
-    rect_high_ref(m_temp_rect, i) = high[i];
+    rect_low_rw(m_temp_rect, i) = low[i];
+    rect_high_rw(m_temp_rect, i) = high[i];
   }
   int removed = 0;
   Traversals remove_traverals;
@@ -815,26 +838,6 @@ bool rtree_base::has_duplicate_nodes() {
   return traverse(m_root_id);
 }
 
-bool rtree_base::rect_contains(Rid bigger, Rid smaller) {
-  for (unsigned int index = 0; index < m_dims; ++index) {
-    if (rect_low_ref(bigger, index) > rect_low_ref(smaller, index) ||
-        rect_high_ref(bigger, index) < rect_high_ref(smaller, index)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool rtree_base::rects_overlap(Rid a, Rid b) {
-  for (unsigned int index = 0; index < m_dims; ++index) {
-    if (rect_low_ref(a, index) > rect_high_ref(b, index) ||
-        rect_low_ref(b, index) > rect_high_ref(a, index)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void rtree_base::entry_to_string(Eid e, int level, int spaces, std::ostream &os) {
   if (!e)
     return;
@@ -916,7 +919,7 @@ void rtree_base::rect_to_string(Rid rid, std::ostream &os) {
     if (i == 0) {
       os << "{";
     }
-    os << rect_low_ref(rid, i);
+    os << rect_low_ro(rid, i);
     if (i != m_dims - 1) {
       os << ", ";
     } else {
@@ -930,7 +933,7 @@ void rtree_base::rect_to_string(Rid rid, std::ostream &os) {
     if (i == 0) {
       os << "{";
     }
-    os << rect_high_ref(rid, i);
+    os << rect_high_rw(rid, i);
     if (i != m_dims - 1) {
       os << ", ";
     } else {

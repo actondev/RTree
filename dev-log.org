@@ -968,3 +968,35 @@ Delete(r, o):
 
   
    with simple rect volume. using spherical volume superliminal init is slightly slower!
+** performance: incl source vs static link
+*** src
+    #+begin_quote
+ ../test/test.cpp:426: warning:
+   init size 200 took 47ms
+
+ ../test/test.cpp:453: warning:
+   search x10000 13 ms 
+
+ ../test/test.cpp:458: warning:
+   copy took 2 ms 
+
+ ../test/test.cpp:479: warning:
+   removing fat cross took 6 ms 
+
+    #+end_quote
+*** link
+    no inline
+    #+begin_quote
+
+../test/test.cpp:426: warning:
+  init size 200 took 173ms
+
+../test/test.cpp:453: warning:
+  search x10000 38 ms 
+
+../test/test.cpp:458: warning:
+  copy took 3 ms 
+
+../test/test.cpp:479: warning:
+  removing fat cross took 11 ms
+  #+end_quote

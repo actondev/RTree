@@ -125,18 +125,20 @@ class rtree_base {
   //   m_data[did.id] = data;
   // }
 
-  Eid get_node_entry(Nid n, int idx);
+  Eid get_node_entry(Nid n, int idx) const;
   void set_node_entry(Nid n, int idx, Eid e);
 
   Node &get_node(Nid n);
 
   Entry &get_entry(Eid e);
 
-  inline ELEMTYPE rect_volume(Rid);
-  inline ELEMTYPE &rect_low_ref(const Rid &r, int dim);
-  inline ELEMTYPE &rect_high_ref(const Rid &r, int dim);
-  inline bool rect_contains(Rid bigger, Rid smaller);
-  inline bool rects_overlap(Rid, Rid);
+  ELEMTYPE rect_volume(Rid) const;
+  const ELEMTYPE &rect_low_ro(const Rid &r, int dim) const;
+  const ELEMTYPE &rect_high_ro(const Rid &r, int dim) const;
+  ELEMTYPE &rect_low_rw(const Rid &r, int dim);
+  ELEMTYPE &rect_high_rw(const Rid &r, int dim);
+  bool rect_contains(Rid bigger, Rid smaller) const;
+  bool rects_overlap(Rid, Rid) const;
 
   std::string rect_to_string(Rid);
   void rect_to_string(Rid, std::ostream &os);
@@ -176,13 +178,12 @@ class rtree_base {
   /// insert entry into leaf node: if a split occured, returns a valid new node
   Nid insert(Nid, Eid);
   void plain_insert(Nid, Eid);
-  Nid choose_leaf(Rid r, Traversal &traversal);
-  Nid choose_node(Nid n, Rid r, int height, Traversal &traversal);
-  Eid choose_subtree(Nid n, Rid r);
 
   /// Given an R-tree whose root node is T, find the leaf node
   /// containing the index entry E
-  Nid find_lead(Nid T, Rid r);
+  Nid choose_leaf(Rid r, Traversal &traversal);
+  Nid choose_node(Nid n, Rid r, int height, Traversal &traversal);
+  Eid choose_subtree(Nid n, Rid r);
 
   /// Given a leaf node L, from which an entry has been deleted,
   /// eliminate the node if it has too few entries and relocate its
